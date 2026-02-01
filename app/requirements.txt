@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+networkx
+matplotlib
+numpy
+pydantic
+pulp
+google-generativeai
+python-dotenv
+Pillow
+scipy
