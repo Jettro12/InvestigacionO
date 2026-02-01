@@ -1,0 +1,340 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Colores Primarios - Azul Corporativo */
+  --primary-blue: #0052a3;
+  --primary-blue-light: #0066cc;
+  --primary-blue-darker: #003d7a;
+
+  /* Colores Secundarios */
+  --accent-blue: #1e88e5;
+  --light-blue: #e3f2fd;
+  --lighter-blue: #f0f7ff;
+
+  /* Grises Profesionales */
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+
+  /* Colores de Estado */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* Fondos */
+  --background: #ffffff;
+  --background-secondary: #f9fafb;
+  --foreground: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* Bordes */
+  --border-color: #e5e7eb;
+  --border-color-light: #f3f4f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f172a;
+    --background-secondary: #1e293b;
+    --foreground: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --border-color: #334155;
+    --border-color-light: #1e293b;
+  }
+}
+
+/* Reset y Base */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  color: var(--foreground);
+  background-color: var(--background);
+  font-family:
+    var(--font-inter),
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.3px;
+  background-image:
+    radial-gradient(
+      circle at 20% 50%,
+      rgba(0, 82, 163, 0.08) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 80% 80%,
+      rgba(30, 136, 229, 0.05) 0%,
+      transparent 50%
+    );
+  background-attachment: fixed;
+}
+
+/* Tipografía */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--foreground);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+}
+
+h2 {
+  font-size: 2rem;
+  font-weight: 750;
+}
+
+h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+h4 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+p {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* Enlaces */
+a {
+  color: var(--primary-blue-light);
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+a:hover {
+  color: var(--primary-blue-darker);
+  text-decoration: none;
+}
+
+/* Botones */
+.btn {
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  padding: 0.625rem 1.25rem;
+}
+
+.btn-primary {
+  background: linear-gradient(
+    135deg,
+    var(--primary-blue-light) 0%,
+    var(--primary-blue) 100%
+  );
+  border: none;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 82, 163, 0.2);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(
+    135deg,
+    var(--primary-blue) 0%,
+    var(--primary-blue-darker) 100%
+  );
+  box-shadow: 0 6px 16px rgba(0, 82, 163, 0.3);
+  transform: translateY(-2px);
+  color: white;
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-outline-primary {
+  color: var(--primary-blue-light);
+  border: 2px solid var(--primary-blue-light);
+  background-color: transparent;
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--primary-blue-light);
+  color: white;
+  border-color: var(--primary-blue-light);
+}
+
+/* Cards */
+.card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: var(--background);
+}
+
+.card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 8px 24px rgba(30, 136, 229, 0.12);
+  transform: translateY(-4px);
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+.card-title {
+  color: var(--foreground);
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+/* Secciones */
+section {
+  padding: 4rem 0;
+}
+
+section.hero {
+  padding: 6rem 0;
+  background: linear-gradient(135deg, var(--lighter-blue) 0%, #ffffff 100%);
+}
+
+/* Contenedores */
+.container {
+  max-width: 1200px;
+}
+
+/* Utilidades de espaciado profesional */
+.pt-section {
+  padding-top: 4rem;
+}
+
+.pb-section {
+  padding-bottom: 4rem;
+}
+
+.py-section {
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+}
+
+/* Divisores y líneas */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 3rem 0;
+}
+
+/* Badges y etiquetas */
+.badge {
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.badge-primary {
+  background-color: var(--light-blue);
+  color: var(--primary-blue);
+}
+
+.badge-success {
+  background-color: #ecfdf5;
+  color: var(--success);
+}
+
+.badge-info {
+  background-color: #eff6ff;
+  color: var(--info);
+}
+
+/* Sombras consistentes */
+.shadow-sm {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+}
+
+.shadow-md {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+.shadow-lg {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Transiciones suaves */
+.transition-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-400);
+}
+
+/* Breakpoints */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  section {
+    padding: 2.5rem 0;
+  }
+
+  .pt-section,
+  .pb-section,
+  .py-section {
+    padding-top: 2.5rem;
+    padding-bottom: 2.5rem;
+  }
+}
