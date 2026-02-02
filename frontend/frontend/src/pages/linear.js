@@ -375,6 +375,103 @@ export default function LinearPage() {
                 />
               </div>
             )}
+
+            {/* Análisis Inteligente con IA */}
+            {solution.intelligent_analysis && (
+              <div
+                className="card border-0 shadow-lg p-4 bg-gradient mt-4"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #f5f7fa 0%, #e8eef7 100%)",
+                }}
+              >
+                <h5 className="mb-4">
+                  🤖 Análisis de Sensibilidad e Interpretación
+                </h5>
+
+                {/* Variables críticas destacadas */}
+                {solution.sensitivity &&
+                  Object.entries(solution.sensitivity).length > 0 && (
+                    <div className="row mb-4">
+                      <div className="col-12">
+                        <h6 className="text-muted mb-3">
+                          📊 Variables Críticas
+                        </h6>
+                        <div className="d-flex gap-2 flex-wrap">
+                          {Object.entries(solution.sensitivity).map(
+                            ([varName, sensValue]) => (
+                              <div
+                                key={varName}
+                                className="badge bg-primary fs-6 p-3"
+                              >
+                                <span className="fw-bold">{varName}</span>
+                                <br />
+                                <small>
+                                  Sensibilidad: {sensValue.toFixed(4)}
+                                </small>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Análisis de texto con resaltes visuales */}
+                <div
+                  className="p-4 bg-white rounded"
+                  style={{ lineHeight: "1.8" }}
+                >
+                  {typeof solution.intelligent_analysis === "string"
+                    ? solution.intelligent_analysis
+                        .split("\n")
+                        .filter((line) => line.trim())
+                        .map((line, idx) => {
+                          let bgColor = "";
+                          let borderColor = "";
+                          let icon = "";
+
+                          if (line.includes("[CRÍTICO]")) {
+                            bgColor = "#fff5f5";
+                            borderColor = "#dc3545";
+                            icon = "🔴";
+                          } else if (line.includes("[RECOMENDACIÓN]")) {
+                            bgColor = "#f0fdf4";
+                            borderColor = "#28a745";
+                            icon = "✅";
+                          } else if (line.includes("[RIESGO]")) {
+                            bgColor = "#fffbf0";
+                            borderColor = "#ffc107";
+                            icon = "⚠️";
+                          }
+
+                          return (
+                            <div
+                              key={idx}
+                              className="mb-3 p-3 rounded"
+                              style={{
+                                backgroundColor: bgColor || "transparent",
+                                borderLeft: borderColor
+                                  ? `4px solid ${borderColor}`
+                                  : "none",
+                              }}
+                            >
+                              <p className="mb-0 text-secondary">
+                                {icon && (
+                                  <span className="me-2 fw-bold">{icon}</span>
+                                )}
+                                {line.replace(
+                                  /\[(CRÍTICO|RECOMENDACIÓN|RIESGO)\]/g,
+                                  "",
+                                )}
+                              </p>
+                            </div>
+                          );
+                        })
+                    : solution.intelligent_analysis}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
