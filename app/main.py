@@ -1,5 +1,6 @@
 print(">>> CARGANDO app/main.py")
 
+# Force Reload Trigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import optimization_routes

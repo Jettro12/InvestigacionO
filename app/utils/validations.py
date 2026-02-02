@@ -7,11 +7,11 @@ def validate_linear_problem(data):
 
     # Solo forzar '<=' para Simplex estándar; permitir '=', '>=' para Gran M, Dos Fases, Dual
     allowed_signs = {
-        "simplex": ["<="],
+        "simplex": ["<=", ">=", "="], # Relaxed to allow auto-switching in backend
         "m_big": ["<=", ">=", "="],
         "two_phase": ["<=", ">=", "="],
         "dual": ["<=", ">=", "="],
-        "graphical": ["<="],  # depende de implementación
+        "graphical": ["<=", ">=", "="], 
     }
     method = data.get("method", "simplex")
     allowed = allowed_signs.get(method, ["<="])

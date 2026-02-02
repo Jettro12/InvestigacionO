@@ -9,3 +9,5 @@ google-generativeai
 python-dotenv
 Pillow
 scipy
+sqlalchemy
+groq

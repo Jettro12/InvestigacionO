@@ -15,6 +15,17 @@ def solve_linear(data: dict):
     
     # Determinar el método a utilizar
     method = data.get("method", "simplex")  # Método por defecto: Simplex
+    
+    # Auto-detect requirement for Two Phase if Simplex is chosen with >= or =
+    constraints = data.get("constraints", [])
+    if method == "simplex":
+        for c in constraints:
+            if c.get("sign") in [">=", "="]:
+                print("⚠️ Detectadas restricciones >= o =. Cambiando método Simplex -> Dos Fases automáticamente.")
+                method = "two_phase"
+                data["method"] = "two_phase" # Update data for consistency
+                break
+
     try:
         if method == "graphical":
             solution = solve_graphical(data)  # Llamar al método gráfico
