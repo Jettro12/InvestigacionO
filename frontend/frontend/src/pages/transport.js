@@ -315,15 +315,89 @@ export default function TransportPage() {
             )}
 
             {solution.sensitivity_analysis && (
-              <div className="card border-0 shadow-lg p-4 bg-white">
-                <h5 className="mb-3">
+              <div
+                className="card border-0 shadow-lg p-4 bg-gradient mt-4"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #f5f7fa 0%, #e8eef7 100%)",
+                }}
+              >
+                <h5 className="mb-4">
                   🤖 Análisis de Sensibilidad e Interpretación
                 </h5>
+
+                {/* Información del costo */}
+                <div className="row mb-4">
+                  <div className="col-md-6">
+                    <div className="p-3 bg-warning text-dark rounded">
+                      <small className="text-muted">Costo Inicial</small>
+                      <h6 className="fw-bold mb-0">
+                        ${solution.initial_cost?.toLocaleString()}
+                      </h6>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="p-3 bg-success text-white rounded">
+                      <small>Costo Óptimo</small>
+                      <h6 className="fw-bold mb-0">
+                        ${solution.total_cost?.toLocaleString()}
+                      </h6>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Análisis de texto con resaltes visuales */}
                 <div
-                  className="p-3 bg-light rounded"
-                  style={{ whiteSpace: "pre-wrap" }}
+                  className="p-4 bg-white rounded"
+                  style={{ lineHeight: "1.8" }}
                 >
-                  {solution.sensitivity_analysis}
+                  {typeof solution.sensitivity_analysis === "string"
+                    ? solution.sensitivity_analysis
+                        .split("\n")
+                        .filter((line) => line.trim())
+                        .map((line, idx) => {
+                          let bgColor = "";
+                          let borderColor = "";
+                          let icon = "";
+
+                          if (line.includes("[CRÍTICO]")) {
+                            bgColor = "#fff5f5";
+                            borderColor = "#dc3545";
+                            icon = "🔴";
+                          } else if (line.includes("[RECOMENDACIÓN]")) {
+                            bgColor = "#f0fdf4";
+                            borderColor = "#28a745";
+                            icon = "✅";
+                          } else if (line.includes("[RIESGO]")) {
+                            bgColor = "#fffbf0";
+                            borderColor = "#ffc107";
+                            icon = "⚠️";
+                          }
+
+                          return (
+                            <div
+                              key={idx}
+                              className="mb-3 p-3 rounded"
+                              style={{
+                                backgroundColor: bgColor || "transparent",
+                                borderLeft: borderColor
+                                  ? `4px solid ${borderColor}`
+                                  : "none",
+                              }}
+                            >
+                              <p className="mb-0 text-secondary">
+                                {icon && (
+                                  <span className="me-2 fw-bold">{icon}</span>
+                                )}
+                                {line.replace(
+                                  /\[(CRÍTICO|RECOMENDACIÓN|RIESGO)\]/g,
+                                  "",
+                                )}
+                              </p>
+                            </div>
+                          );
+                        })
+                    : solution.sensitivity_analysis}
                 </div>
               </div>
             )}

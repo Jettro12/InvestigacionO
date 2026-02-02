@@ -1,39 +1,65 @@
 print(">>> CARGANDO app/services/optimization_service_network.py")
 
-import google.generativeai as genai
+from groq import Groq
 import os
 from dotenv import load_dotenv
 load_dotenv()
-# API_KEY = os.getenv("GEMINI_API_KEY")
-API_KEY = "AIzaSyBbCdHEz7D6giJGSvZvvfPP1tDG9N-GnJk"
-print(">>> API_KEY configurado para Gemini:", API_KEY)
-genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+# Cargar API key desde .env
+API_KEY = os.getenv("GROQ_API_KEY")
+if API_KEY:
+    client = Groq(api_key=API_KEY)
+    print(f"✅ API_KEY configurada para Groq (primeros 20 caracteres): {API_KEY[:20]}...")
+else:
+    print("❌ ERROR: GROQ_API_KEY no está configurada en .env")
+    client = None
 
 from algorithms.network_optimization import (
     solve_all_problems, sensitivity_analysis_shortest_path
 )
 
 def gemini_network_sensitivity_analysis(graph, shortest_path_result):
-    API_KEY = os.getenv("GOOGLE_API_KEY") or "AIzaSyBbCdHEz7D6giJGSvZvvfPP1tDG9N-GnJk"
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel("models/gemini-1.5-flash")
-    print(">>> ENTRANDO a gemini_network_sensitivity_analysis")
-    prompt = f"""
-    Dado el siguiente grafo dirigido con aristas (origen, destino, peso):
-    {graph}
-    Y la ruta más corta encontrada es:
-    {shortest_path_result.get('node_order', [])} con peso total {shortest_path_result.get('total_weight', 'N/A')}.
-    Analiza la sensibilidad de la red: ¿qué aristas son críticas para la ruta más corta?, ¿qué pasaría si se elimina una arista?, ¿cómo se puede mejorar la robustez de la red?, y da recomendaciones para optimización y resiliencia.
-    Presenta el análisis de forma clara y estructurada para un usuario de negocios.
-    """
+    if not client:
+        return "Error: API de Groq no configurada. Verifica tu GROQ_API_KEY en .env"
+    
+    print(">>> ENTRANDO a groq_network_sensitivity_analysis")
+    import json
+    
+    # Convertir datos a strings JSON
+    graph_str = json.dumps(graph)
+    node_order_str = json.dumps(shortest_path_result.get('node_order', []))
+    
+    prompt = f"""Analiza la sensibilidad de esta red:
+    Grafo: {graph_str}
+    Ruta más corta encontrada: {node_order_str}
+    Peso total: {shortest_path_result.get('total_weight', 'N/A')}
+
+Proporciona un análisis claro en texto plano. Usa estas marcas:
+- [CRÍTICO] para información importante
+- [RECOMENDACIÓN] para mejoras sugeridas
+- [RIESGO] para puntos débiles
+
+Incluye:
+1. Qué aristas son críticas para la ruta
+2. Impacto si se elimina una arista crítica
+3. Evaluación de robustez de la red
+4. Mejoras para mejorar la red
+5. Análisis de rutas alternativas
+6. Recomendaciones concretas
+
+Presenta en texto limpio y comprensible."""
+    
     try:
-        response = model.generate_content(prompt).text
-        print(">>> RESPUESTA DE GEMINI:", response)
+        message = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.1-8b-instant"
+        )
+        response = message.choices[0].message.content
+        print(">>> RESPUESTA DE GROQ:", response)
+        return response
     except Exception as e:
-        response = f"Error al generar análisis con Gemini: {str(e)}"
-        print(">>> ERROR DE GEMINI:", response)
-    return response
+        response = f"Error al generar análisis con Groq: {str(e)}"
+        print(">>> ERROR DE GROQ:", response)
+        return response
 
 def solve_optimization_network(problem_type, data):
     print(f">>> solve_optimization_network llamado con problem_type={problem_type}")

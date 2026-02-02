@@ -1,6 +1,6 @@
 from algorithms.linear_programming import solve_linear_program
 import numpy as np
-import google.generativeai as genai
+from groq import Groq
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -14,25 +14,54 @@ from algorithms.transportation import (
 )
 from algorithms.network_optimization import dijkstra_algorithm
 
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+# Configurar Groq AI con API key del .env
+API_KEY = os.getenv("GROQ_API_KEY")
+if API_KEY:
+    client = Groq(api_key=API_KEY)
+else:
+    client = None
 
 def generate_sensitivity_analysis(solution, total_cost):
     """
-    Genera un análisis de sensibilidad utilizando Google Gemini AI con una estructura detallada.
+    Genera un análisis de sensibilidad utilizando Groq AI con texto plano.
     """
-    prompt = f"""Dado un problema de transporte con la solución óptima:
-    {solution} y un costo total de {total_cost}, realiza un análisis de sensibilidad detallado.
+    import json
+    
+    if not API_KEY:
+        return "Error: GROQ_API_KEY no está configurada en .env"
+    
+    # Convertir solución a string JSON para evitar errores
+    solution_str = json.dumps(solution.tolist() if hasattr(solution, 'tolist') else solution)
+    
+    prompt = f"""Analiza en detalle este problema de transporte:
+    - Solución óptima: {solution_str}
+    - Costo total: {total_cost}
 
-    1️⃣ **Resumen de la Solución**: Explica cómo se distribuyeron los envíos.
-    2️⃣ **Posibles Mejoras**: Identifica qué ajustes podrían reducir costos o mejorar eficiencia.
-    3️⃣ **Impacto en Costos y Tiempos**: Evalúa cómo los cambios pueden afectar la operación.
-    4️⃣ **Recomendaciones Finales**: Proporciona consejos concretos para optimizar la distribución.
+Proporciona un análisis claro en texto plano. Usa estas marcas para resaltar:
+- [CRÍTICO] para información de alta importancia
+- [RECOMENDACIÓN] para sugerencias prácticas
+- [RIESGO] para puntos débiles
 
-    Presenta la respuesta de manera clara y estructurada para que sea fácil de entender por un usuario de negocios.
-    """
+Incluye:
+1. Resumen de cómo se distribuyeron los envíos
+2. Mejoras posibles
+3. Impacto de cambios
+4. Recomendaciones concretas
+5. Ahorro potencial si se implementan mejoras
+6. Riesgos a considerar
 
-    response = model.generate_content(prompt).text
-    return response
+Presenta en texto limpio y comprensible para usuarios de negocios."""
+
+    try:
+        message = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.1-8b-instant"
+        )
+        response_text = message.choices[0].message.content
+        return response_text
+    except Exception as e:
+        print(f"Error en análisis de sensibilidad: {str(e)}")
+        return f"Error al generar análisis: {str(e)}"
 
 def calculate_total_cost(solution, costs):
     """

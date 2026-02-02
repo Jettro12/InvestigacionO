@@ -247,38 +247,122 @@ export default function NetworkPage() {
 
         {/* Resultados */}
         {solution && (
-          <div className="row g-4 mt-2">
-            {Object.entries(metodoNombres).map(([key, label]) => {
-              const res = solution[key];
-              if (!res) return null;
-              return (
-                <div key={key} className="col-md-6">
-                  <div className="card shadow-sm border-0 h-100">
-                    <div className="card-header bg-white fw-bold">{label}</div>
-                    <div className="card-body text-center">
-                      <div className="mb-3 p-2 bg-light rounded">
-                        {key === "max_flow"
-                          ? `Flujo: ${res.max_flow}`
-                          : key === "min_cost_flow"
-                            ? `Costo: ${res.min_cost}`
-                            : `Peso Total: ${res.total_weight}`}
+          <div>
+            <div className="row g-4 mt-2">
+              {Object.entries(metodoNombres).map(([key, label]) => {
+                const res = solution[key];
+                if (!res) return null;
+                return (
+                  <div key={key} className="col-md-6">
+                    <div className="card shadow-sm border-0 h-100">
+                      <div className="card-header bg-white fw-bold">
+                        {label}
                       </div>
-                      {res.graph_image && (
-                        <img
-                          src={`data:image/png;base64,${res.graph_image}`}
-                          className="img-fluid rounded cursor-pointer shadow-sm hover-zoom"
-                          alt={label}
-                          onClick={() => {
-                            setSelectedImage(res);
-                            setShowModal(true);
-                          }}
-                        />
-                      )}
+                      <div className="card-body text-center">
+                        <div className="mb-3 p-2 bg-light rounded">
+                          {key === "max_flow"
+                            ? `Flujo: ${res.max_flow}`
+                            : key === "min_cost_flow"
+                              ? `Costo: ${res.min_cost}`
+                              : `Peso Total: ${res.total_weight}`}
+                        </div>
+                        {res.graph_image && (
+                          <img
+                            src={`data:image/png;base64,${res.graph_image}`}
+                            className="img-fluid rounded cursor-pointer shadow-sm hover-zoom"
+                            alt={label}
+                            onClick={() => {
+                              setSelectedImage(res);
+                              setShowModal(true);
+                            }}
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+
+            {/* Análisis Inteligente - Shortest Path */}
+            {solution.shortest_path?.sensitivity_analysis_gemini && (
+              <div
+                className="card border-0 shadow-lg p-4 bg-gradient mt-4"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #f5f7fa 0%, #e8eef7 100%)",
+                }}
+              >
+                <h5 className="mb-4">
+                  🤖 Análisis de Sensibilidad e Interpretación (Ruta Más Corta)
+                </h5>
+
+                {/* Información de la ruta */}
+                {solution.shortest_path?.total_weight && (
+                  <div className="mb-4 p-3 bg-primary text-white rounded">
+                    <small>Peso Total de la Ruta</small>
+                    <h6 className="fw-bold mb-0">
+                      {solution.shortest_path.total_weight}
+                    </h6>
+                  </div>
+                )}
+
+                {/* Análisis de texto con resaltes visuales */}
+                <div
+                  className="p-4 bg-white rounded"
+                  style={{ lineHeight: "1.8" }}
+                >
+                  {typeof solution.shortest_path.sensitivity_analysis_gemini ===
+                  "string"
+                    ? solution.shortest_path.sensitivity_analysis_gemini
+                        .split("\n")
+                        .filter((line) => line.trim())
+                        .map((line, idx) => {
+                          let bgColor = "";
+                          let borderColor = "";
+                          let icon = "";
+
+                          if (line.includes("[CRÍTICO]")) {
+                            bgColor = "#fff5f5";
+                            borderColor = "#dc3545";
+                            icon = "🔴";
+                          } else if (line.includes("[RECOMENDACIÓN]")) {
+                            bgColor = "#f0fdf4";
+                            borderColor = "#28a745";
+                            icon = "✅";
+                          } else if (line.includes("[RIESGO]")) {
+                            bgColor = "#fffbf0";
+                            borderColor = "#ffc107";
+                            icon = "⚠️";
+                          }
+
+                          return (
+                            <div
+                              key={idx}
+                              className="mb-3 p-3 rounded"
+                              style={{
+                                backgroundColor: bgColor || "transparent",
+                                borderLeft: borderColor
+                                  ? `4px solid ${borderColor}`
+                                  : "none",
+                              }}
+                            >
+                              <p className="mb-0 text-secondary">
+                                {icon && (
+                                  <span className="me-2 fw-bold">{icon}</span>
+                                )}
+                                {line.replace(
+                                  /\[(CRÍTICO|RECOMENDACIÓN|RIESGO)\]/g,
+                                  "",
+                                )}
+                              </p>
+                            </div>
+                          );
+                        })
+                    : solution.shortest_path.sensitivity_analysis_gemini}
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
         )}
       </div>
