@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from models.linear_program import solve_linear_problem, solve_graphical, solve_two_phase_linear_problem, solve_m_big_linear_problem, solve_dual_linear_problem
-
+# Eliminamos las funciones que ya no existen en models.linear_program
+from models.linear_program import solve_linear_problem, solve_graphical, solve_dual_linear_problem
 from utils.validations import validate_linear_problem
 from utils.sensitivity_analysis import analyze_sensitivity, generate_intelligent_sensitivity_analysis
 
@@ -9,69 +9,66 @@ router = APIRouter()
 @router.post("/solve_linear")
 def solve_linear(data: dict):
     print("Datos recibidos:", data)
+    
+    # 1. Validaciones previas
     errors = validate_linear_problem(data)
     if errors:
         raise HTTPException(status_code=400, detail=errors)
     
-    # Determinar el método a utilizar
-    method = data.get("method", "simplex")  # Método por defecto: Simplex
+    method = data.get("method", "simplex")
+    
     try:
+        # 2. Selección de motor de cálculo
         if method == "graphical":
-            solution = solve_graphical(data)  # Llamar al método gráfico
-        elif method == "two_phase":
-            # Llamar al método de Dos Fases
-            solution = solve_two_phase_linear_problem(
-                data["objective_coeffs"],
-                data["variables"],
-                data["constraints"],
-                data["objective"]
-            )
-        elif method == "m_big":  # Para el método Gran M
-            solution = solve_m_big_linear_problem(
-                data["objective_coeffs"],
-                data["variables"],
-                data["constraints"],
-                data["objective"]
-            )
+            solution = solve_graphical(data)
         elif method == "dual":
-            solution = solve_dual_linear_problem(data)    
-                
+            solution = solve_dual_linear_problem(data)
         else:
-            solution = solve_linear_problem(data)  # Llamar al método de programación lineal
+            # Esta función unificada ahora resuelve 'simplex', 'two_phase' y 'm_big'
+            # pasando el método interno a SimplexSolverV2
+            solution = solve_linear_problem(data)
 
-        # Análisis de sensibilidad solo se aplica a métodos de programación lineal
+        # Validar que la solución no sea None
+        if solution is None:
+            raise ValueError("El motor de cálculo no devolvió una respuesta válida.")
+
+        # 3. Análisis de sensibilidad (No aplica a Gráfico)
         sensitivity = None
         intelligent_analysis = None
+        
         if method != "graphical":
             try:
-                # Calcular valores de sensibilidad
+                # Calcular valores numéricos de sensibilidad
                 sensitivity = analyze_sensitivity(data, solution)
-                print(f"📊 Análisis de sensibilidad generado: {sensitivity}")
                 
-                # Generar análisis inteligente con Gemini AI
-                intelligent_analysis = generate_intelligent_sensitivity_analysis(data, solution, sensitivity, method)
-                print(f"🤖 Análisis inteligente generado con Gemini AI")
-                
+                # Generar interpretación con IA (Groq/Gemini)
+                intelligent_analysis = generate_intelligent_sensitivity_analysis(
+                    data, solution, sensitivity, method
+                )
             except Exception as e:
                 print(f"❌ Error en análisis de sensibilidad: {str(e)}")
                 sensitivity = {}
                 intelligent_analysis = "Error al generar análisis de sensibilidad."
 
-     # En tu método solve_linear:
-        response = {"solution": solution, "sensitivity": sensitivity, "intelligent_analysis": intelligent_analysis}
-        if method == "graphical":
-            response["solution"]["graph"] = "/static/graph_with_table.png"
-        else:
-            response["solution"]["graph"] = None
+        # 4. Construcción de la respuesta final
+        response = {
+            "solution": solution, 
+            "sensitivity": sensitivity, 
+            "intelligent_analysis": intelligent_analysis
+        }
 
-        print("Respuesta del backend:", response)  # Para depuración
+        # Manejo de la ruta de la imagen para el gráfico
+        if method == "graphical" and "graph" in solution:
+            # Mantenemos la ruta que viene del modelo o la forzamos a la estática
+            response["solution"]["graph"] = solution.get("graph", "/static/graph_with_table.png")
+        else:
+            # Aseguramos que la llave exista como None para evitar errores en el frontend
+            if "solution" in response and isinstance(response["solution"], dict):
+                response["solution"]["graph"] = None
+
+        print("✅ Respuesta exitosa generada")
         return response
 
     except Exception as e:
-        print("Error en solve_linear:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-    # En el método gráfico (supongamos que es dentro de 'solve_graphical')
-def save_graph_to_file():
-    graph_path = "static/graph_with_table.png"  # Guardar la imagen en la carpeta pública
-    # Código para generar el gráfico y guardarlo en graph_path
-
+        print(f"🔥 Error crítico en solve_linear: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
