@@ -1,11 +1,8 @@
 fastapi
 uvicorn
-networkx
 matplotlib
 numpy
 pydantic
-pulp
-google-generativeai
+groq
 python-dotenv
 Pillow
-scipy

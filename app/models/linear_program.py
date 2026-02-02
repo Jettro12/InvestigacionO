@@ -1,348 +1,180 @@
-import pulp
-import re
 import numpy as np
 import matplotlib
+import os
 from fastapi.encoders import jsonable_encoder
 
-matplotlib.use('Agg')  # Usar un backend no interactivo
+matplotlib.use('Agg')  # Backend no interactivo para servidores
 import matplotlib.pyplot as plt
-from pulp import LpProblem, LpMaximize, LpMinimize, LpVariable, lpSum, value
-
-def sanitize_variable_name(name):
-    """Corrige los nombres de variables para que sean válidos en PuLP."""
-    return re.sub(r'[^a-zA-Z0-9_]', '_', name)
+from algorithms.linear_programming_v2 import SimplexSolverV2
 
 def solve_linear_problem(data):
-    method = data.get("method", "simplex")  # Método por defecto: Simplex
-
-    # Crear problema de programación lineal
-    problem = pulp.LpProblem("Linear_Problem", 
-                             pulp.LpMaximize if data["objective"] == "max" else pulp.LpMinimize)
-    # Definir variables de decisión
-    variables = {var: pulp.LpVariable(sanitize_variable_name(var), lowBound=0) 
-                 for var in data["variables"]}
-
-    # Diccionario para almacenar las variables artificiales
-    artificial_variables = {}
-
-    if method in ["two_phase", "m_big"]:
-        M = 10000  # Valor grande para Gran M, puedes ajustarlo según sea necesario
-        for i, constraint in enumerate(data["constraints"]):
-            if constraint["sign"] in [">=", "="]:
-                artificial_var = pulp.LpVariable(f"artificial_{i}", lowBound=0)
-                artificial_variables[f"artificial_{i}"] = artificial_var
-                lhs = pulp.lpSum(constraint["coeffs"][j] * variables[data["variables"][j]]
-                                 for j in range(len(constraint["coeffs"])))
-                if method == "m_big":  # Gran M
-                    if constraint["sign"] == ">=":
-                        problem += lhs - artificial_var >= constraint["rhs"] - M * artificial_var
-                    elif constraint["sign"] == "=":
-                        problem += lhs == constraint["rhs"]
-                else:  # Método de Dos Fases
-                    if constraint["sign"] == ">=":
-                        problem += lhs - artificial_var >= constraint["rhs"]
-                    elif constraint["sign"] == "=":
-                        problem += lhs == constraint["rhs"]
-
-    # Construir la función objetivo
-    if data["objective"] == "max" and method == "m_big":
-        # Penalizamos las variables artificiales para evitar que tengan valor en la solución
-        penalty = M * pulp.lpSum(artificial_variables[a] for a in artificial_variables)
-        objective_expr = (pulp.lpSum(data["objective_coeffs"][i] * variables[var]
-                         for i, var in enumerate(data["variables"])) - penalty)
-    else:
-        objective_expr = pulp.lpSum(data["objective_coeffs"][i] * variables[var]
-                                    for i, var in enumerate(data["variables"]))
+    """
+    Resuelve problemas de PL usando la implementación robusta SimplexSolverV2.
+    """
+    method = data.get("method", "simplex")
+    c = np.array(data["objective_coeffs"], dtype=float)
+    num_vars = len(c)
     
-    problem += objective_expr, "Objective"
-
-    # Agregar restricciones (sin variables artificiales)
-    for i, constraint in enumerate(data["constraints"]):
-        lhs = pulp.lpSum(constraint["coeffs"][j] * variables[data["variables"][j]]
-                         for j in range(len(constraint["coeffs"])))
-        if constraint["sign"] == "<=":
-            problem += lhs <= constraint["rhs"]
-
-    # Selección del solver
-    solver = pulp.PULP_CBC_CMD(msg=True, logPath="solver_log.txt")
-    problem.solve(solver)
+    A_ub, b_ub = [], []
+    A_eq, b_eq = [], []
     
-    # Verificar el estado del problema
-    status = pulp.LpStatus[problem.status]
-    if status == "Infeasible":
-        return jsonable_encoder({"error": "El problema es infactible"})
-    elif status == "Unbounded":
-        return jsonable_encoder({"error": "El problema es no acotado"})
-
-    # Leer el log de iteraciones y extraer el número de iteraciones
-    with open("solver_log.txt", "r") as file:
-        log_lines = file.readlines()
-    iteration_line = [line for line in log_lines if "iterations" in line]
-    iterations_count = 0
-    if iteration_line:
-        match = re.search(r'(\d+)\s+iterations', iteration_line[0])
-        if match:
-            iterations_count = int(match.group(1))
+    for constraint in data["constraints"]:
+        coeffs = list(constraint["coeffs"])
+        # Normalización de dimensiones
+        while len(coeffs) < num_vars: coeffs.append(0)
+        coeffs = coeffs[:num_vars]
+        
+        sign = constraint.get("sign", "<=")
+        rhs = float(constraint.get("rhs", 0))
+        
+        if sign == "<=":
+            A_ub.append(coeffs)
+            b_ub.append(rhs)
+        elif sign == "=":
+            A_eq.append(coeffs)
+            b_eq.append(rhs)
+        elif sign == ">=":
+            # Convertir >= a <= multiplicando por -1
+            A_ub.append([-x for x in coeffs])
+            b_ub.append(-rhs)
     
-    artificial_variables_cleaned = {
-        f"a{i+1}": (value(var) if var is not None else 0)
-        for i, var in enumerate(artificial_variables.values())
-    }
-
-    solution = {
-        "status": status,
-        "objective_value": pulp.value(problem.objective),
-        "variable_values": {str(var): pulp.value(variables[var]) for var in data["variables"]},
-        "artificial_variables": artificial_variables_cleaned if method in ["m_big", "two_phase"] else None,
-        "iterations": iterations_count
+    # Asegurar que las matrices no sean None para el constructor
+    A_ub = np.array(A_ub) if A_ub else None
+    b_ub = np.array(b_ub) if b_ub else None
+    A_eq = np.array(A_eq) if A_eq else None
+    b_eq = np.array(b_eq) if b_eq else None
+    
+    maximization = data["objective"] == "max"
+    solver = SimplexSolverV2(c, A_ub, b_ub, A_eq, b_eq, maximization=maximization)
+    
+    # Mapeo de métodos internos
+    method_map = {
+        "simplex": "simplex",
+        "two_phase": "two_phase",
+        "m_big": "big_m"
     }
     
-    return jsonable_encoder(solution)
-
-def solve_m_big_linear_problem(objective_coeffs, variable_names, constraints, objective_type, M=10000):
-    model = LpProblem("M_Big_Problem", LpMaximize if objective_type == "max" else LpMinimize)
-    variables = {name: LpVariable(name, lowBound=0) for name in variable_names}
-    artificial_variables = []
-    
-    for i, constraint in enumerate(constraints):
-        if constraint['sign'] == '>=':
-            artificial_var = LpVariable(f"a{i+1}", lowBound=0)
-            artificial_variables.append(artificial_var)
-            model += lpSum([constraint['coeffs'][j] * variables[variable_names[j]] 
-                            for j in range(len(variable_names))]) - artificial_var >= constraint['rhs'] - M * artificial_var
-        elif constraint['sign'] == '=':
-            artificial_var = LpVariable(f"a{i+1}", lowBound=0)
-            artificial_variables.append(artificial_var)
-            model += lpSum([constraint['coeffs'][j] * variables[variable_names[j]] 
-                            for j in range(len(variable_names))]) - artificial_var >= constraint['rhs']
-            model += lpSum([constraint['coeffs'][j] * variables[variable_names[j]] 
-                            for j in range(len(variable_names))]) + artificial_var <= constraint['rhs']
-        else:
-            model += lpSum([constraint['coeffs'][j] * variables[variable_names[j]] 
-                            for j in range(len(variable_names))]) >= constraint['rhs']
-    
-    model += lpSum([objective_coeffs[i] * variables[variable_names[i]] 
-                    for i in range(len(variable_names))]), "Objective"
-    model.solve()
-    
-    artificial_variables_cleaned = {
-        f"a{i+1}": (value(var) if var is not None else 0)
-        for i, var in enumerate(artificial_variables)
-    }
-    
-    if value(model.objective) > 0:
-        solution = {
-            'status': 'Optimal' if value(model.objective) > 0 else 'Infeasible',
-            'objective_value': value(model.objective),
-            'variable_values': {name: value(variables[name]) for name in variable_names},
-            'artificial_variables': artificial_variables_cleaned,
-        }
-    else:
-        solution = {
-            'status': 'Infeasible',
-            'objective_value': 0,
-            'variable_values': {name: 0 for name in variable_names},
-            'artificial_variables': {f"a{i+1}": 0 for i in range(len(artificial_variables))}
-        }
-    
-    return solution
-def solve_two_phase_linear_problem(objective_coeffs, variable_names, constraints, objective_type):
-    # **Fase 1: Resolver para eliminar variables artificiales**
-    phase1 = LpProblem("Phase1", LpMinimize)
-
-    # Crear variables originales
-    variables = {name: LpVariable(name, lowBound=0) for name in variable_names}
-
-    # Diccionario para almacenar variables artificiales
-    artificial_vars = {}
-
-    # Agregar restricciones y variables artificiales
-    for i, constraint in enumerate(constraints):
-        lhs = lpSum(constraint["coeffs"][j] * variables[variable_names[j]] for j in range(len(constraint["coeffs"])))
-        if constraint["sign"] in [">=", "="]:  
-            art = LpVariable(f"artificial_{i+1}", lowBound=0)  
-            artificial_vars[f"artificial_{i+1}"] = art  
-            phase1 += lhs - art == constraint["rhs"]
-        elif constraint["sign"] == "<=":  
-            phase1 += lhs <= constraint["rhs"]
-
-    # **Función objetivo Fase 1:** Minimizar la suma de las artificiales
-    phase1 += lpSum(artificial_vars[a] for a in artificial_vars), "Phase1_Objective"
-
-    # Resolver Fase 1
-    phase1.solve()
-
-    # Revisar si la solución de la fase 1 es factible
-    artificial_values = {a: value(artificial_vars[a]) for a in artificial_vars}
-    artificial_sum = sum(artificial_values.values())
-
-    if artificial_sum > 1e-5:  # Si las artificiales no son cero, el problema es infactible
-        return {
-            "status": "Infeasible",
-            "message": "No existe solución factible (fase 1).",
-            "artificial_variables": artificial_values
-        }
-
-    # **Fase 2: Resolver el problema original sin variables artificiales**
-    phase2 = LpProblem("Phase2", LpMaximize if objective_type == "max" else LpMinimize)
-
-    # Función objetivo Fase 2
-    phase2 += lpSum(objective_coeffs[i] * variables[variable_names[i]] for i in range(len(variable_names))), "Objective"
-
-    # Agregar restricciones sin variables artificiales
-    for i, constraint in enumerate(constraints):
-        lhs = lpSum(constraint["coeffs"][j] * variables[variable_names[j]] for j in range(len(constraint["coeffs"])))
-        if constraint["sign"] == "<=":
-            phase2 += lhs <= constraint["rhs"]
-        elif constraint["sign"] == ">=":
-            phase2 += lhs >= constraint["rhs"]
-        elif constraint["sign"] == "=":
-            phase2 += lhs == constraint["rhs"]
-
-    # Resolver Fase 2
-    phase2.solve()
-
-    # Construir la respuesta final
-    solution = {
-        "status": pulp.LpStatus[phase2.status],
-        "objective_value": value(phase2.objective),
-        "variable_values": {name: value(variables[name]) for name in variable_names},
-        "artificial_variables": artificial_values  # **Se incluyen las artificiales de Fase 1**
-    }
-
-    return solution
+    result = solver.solve(method_map.get(method, "simplex"))
+    return jsonable_encoder(result)
 
 def solve_graphical(data):
+    """
+    Resuelve y grafica problemas de PL de 2 variables.
+    """
     if len(data["variables"]) != 2:
-        return {"error": "El método gráfico solo se puede usar con 2 variables."}
+        return {"status": "error", "message": "El método gráfico requiere exactamente 2 variables."}
     
-    coeffs = data["objective_coeffs"]
-    constraints = data["constraints"]
-    x = np.linspace(0, 10, 200)
-    y = []
-    for constraint in constraints:
-        if constraint["coeffs"][1] != 0:
-            y_val = (constraint["rhs"] - constraint["coeffs"][0] * x) / constraint["coeffs"][1]
-        else:
-            y_val = np.full_like(x, np.nan)
-        y.append(y_val)
-    
-    plt.figure(figsize=(10, 6))
-    y_min = np.zeros_like(x)
-    for i, y_vals in enumerate(y):
-        if constraints[i]["sign"] == "<=":
-            plt.fill_between(x, y_min, y_vals, where=(y_vals >= y_min), color='lightblue', alpha=0.3, label=f'Restricción {i + 1}')
-        elif constraints[i]["sign"] == ">=":
-            plt.fill_between(x, y_min, y_vals, where=(y_vals <= y_min), color='lightblue', alpha=0.3, label=f'Restricción {i + 1}')
-        else:
-            plt.plot(x, y_vals, label=f'Restricción {i + 1}')
-    
-    y_obj = (coeffs[0] * x) / coeffs[1] if coeffs[1] != 0 else np.full_like(x, np.nan)
-    plt.plot(x, y_obj, label='Función Objetivo', color='red', linestyle='--')
-    plt.xlim(0, 10)
-    plt.ylim(0, 10)
-    plt.xlabel('x1')
-    plt.ylabel('x2')
-    plt.title('Método Gráfico')
-    plt.axhline(0, color='black', linewidth=0.5, ls='--')
-    plt.axvline(0, color='black', linewidth=0.5, ls='--')
-    plt.grid()
-    plt.legend()
-    
-    intersection_points = []
-    for i in range(len(constraints)):
-        for j in range(i + 1, len(constraints)):
-            A = np.array([constraints[i]["coeffs"], constraints[j]["coeffs"]])
-            b = np.array([constraints[i]["rhs"], constraints[j]["rhs"]])
-            if np.linalg.matrix_rank(A) == 2:
-                point = np.linalg.solve(A, b)
-                if all(point >= 0):
-                    intersection_points.append(point)
-    
-    optimal_value = float('-inf')
-    optimal_point = None
-    for point in intersection_points:
-        val = coeffs[0] * point[0] + coeffs[1] * point[1]
-        if val > optimal_value:
-            optimal_value = val
-            optimal_point = point
-    
-    if intersection_points:
-        table_data = [[f'Punto {i+1}', f'{p[0]:.2f}', f'{p[1]:.2f}'] for i, p in enumerate(intersection_points)]
-        table_data.append(["Valor óptimo", f'{optimal_point[0]:.2f}', f'{optimal_point[1]:.2f}'])
-        table_data.append(["Objetivo", f'{optimal_value:.2f}', ''])
-        table = plt.table(cellText=table_data, colLabels=['Punto', 'x1', 'x2'], loc='lower right', cellLoc='center', colColours=["#f5f5f5"]*3)
-        table.scale(1.2, 1.2)
-        table.auto_set_font_size(False)
-        table.set_fontsize(9)
-        table.auto_set_column_width([0, 1, 2])
-    
-    plt.subplots_adjust(bottom=0.3)
-    plt.savefig('static/graph_with_table.png', bbox_inches='tight')
-    plt.close()
-    
-    return {
-        "status": "optimal",
-        "objective_value": optimal_value,
-        "variable_values": {"x1": optimal_point[0], "x2": optimal_point[1]},
-        "graph": "/graph_with_table.png"
-    }
+    try:
+        coeffs = np.array(data["objective_coeffs"], dtype=float)
+        constraints = data["constraints"]
+        is_max = data["objective"] == "max"
+        
+        # 1. Definir límites del gráfico dinámicamente
+        rhs_values = [c["rhs"] for c in constraints if c["rhs"] > 0]
+        limit = max(rhs_values) * 1.2 if rhs_values else 10
+        x_vals = np.linspace(0, limit, 400)
+        
+        plt.figure(figsize=(10, 8))
+        
+        # 2. Encontrar puntos de intersección (vértices candidatos)
+        # Empezamos con el origen y los cruces con los ejes
+        points = [np.array([0.0, 0.0])]
+        
+        for i, cons in enumerate(constraints):
+            a1, a2 = cons["coeffs"]
+            b = cons["rhs"]
+            
+            # Graficar líneas de restricción
+            if a2 != 0:
+                y_plot = (b - a1 * x_vals) / a2
+                plt.plot(x_vals, y_plot, label=f'R{i+1}')
+                points.append(np.array([0.0, b/a2])) # Cruce eje Y
+            else:
+                plt.axvline(x=b/a1, label=f'R{i+1}')
+            
+            if a1 != 0: points.append(np.array([b/a1, 0.0])) # Cruce eje X
+
+        # Intersecciones entre todas las restricciones
+        for i in range(len(constraints)):
+            for j in range(i + 1, len(constraints)):
+                A = np.array([constraints[i]["coeffs"], constraints[j]["coeffs"]])
+                B = np.array([constraints[i]["rhs"], constraints[j]["rhs"]])
+                if np.linalg.matrix_rank(A) == 2:
+                    points.append(np.linalg.solve(A, B))
+
+        # 3. Filtrar puntos factibles
+        feasible_points = []
+        for p in points:
+            if p[0] >= -1e-9 and p[1] >= -1e-9: # Primer cuadrante
+                is_feasible = True
+                for cons in constraints:
+                    val = cons["coeffs"][0] * p[0] + cons["coeffs"][1] * p[1]
+                    if cons["sign"] == "<=" and val > cons["rhs"] + 1e-7: is_feasible = False
+                    if cons["sign"] == ">=" and val < cons["rhs"] - 1e-7: is_feasible = False
+                if is_feasible: feasible_points.append(p)
+
+        if not feasible_points:
+            plt.close()
+            return {"status": "Infeasible", "message": "No existe región factible."}
+
+        # 4. Encontrar el punto óptimo
+        optimal_val = float('-inf') if is_max else float('inf')
+        optimal_p = feasible_points[0]
+        
+        for p in feasible_points:
+            z = coeffs[0] * p[0] + coeffs[1] * p[1]
+            if is_max:
+                if z > optimal_val: optimal_val, optimal_p = z, p
+            else:
+                if z < optimal_val: optimal_val, optimal_p = z, p
+
+        # 5. Estética del gráfico
+        plt.scatter(optimal_p[0], optimal_p[1], color='red', s=100, zorder=5, label='Óptimo')
+        plt.title(f'Método Gráfico ({data["objective"].upper()})')
+        plt.xlabel('x1'); plt.ylabel('x2')
+        plt.xlim(0, limit); plt.ylim(0, limit)
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.legend()
+
+        # Crear carpeta estática si no existe
+        if not os.path.exists('static'): os.makedirs('static')
+        img_path = 'static/graph_with_table.png'
+        plt.savefig(img_path, bbox_inches='tight')
+        plt.close()
+
+        return {
+            "status": "Optimal",
+            "objective_value": float(optimal_val),
+            "variable_values": {"x1": round(float(optimal_p[0]), 4), "x2": round(float(optimal_p[1]), 4)},
+            "graph": "/static/graph_with_table.png"
+        }
+    except Exception as e:
+        plt.close()
+        return {"status": "error", "message": str(e)}
 
 def solve_dual_linear_problem(data):
     """
-    Resuelve el problema dual derivado del problema primal dado en 'data'.
-
-    Se asume que:
-      - Si el objetivo primal es "max", las restricciones son del tipo "Ax <= b" y
-        el dual es: min b^T y, sujeto a A^T y >= c, y >= 0.
-      - Si el objetivo primal es "min", las restricciones son del tipo "Ax >= b" y
-        el dual es: max b^T y, sujeto a A^T y <= c, y >= 0.
-
-    Parámetros en 'data':
-      - "objective": "max" o "min"
-      - "variables": lista de nombres de variables del problema primal.
-      - "objective_coeffs": lista de coeficientes (vector c) de la función objetivo primal.
-      - "constraints": lista de restricciones, cada una con:
-            - "coeffs": coeficientes de la fila de A.
-            - "rhs": valor de b.
-    Retorna un diccionario con:
-      - "status": estado de la solución.
-      - "objective_value": valor óptimo del dual.
-      - "dual_variable_values": diccionario con los valores de las variables duales.
+    Construye y resuelve el problema Dual.
     """
-    import pulp
-    from pulp import LpProblem, LpMinimize, LpMaximize, LpVariable, lpSum, value
-
-    primal_objective = data["objective"]
-    primal_vars = data["variables"]
-    c = data["objective_coeffs"]
-    constraints = data["constraints"]
-
-    m = len(constraints)
-    n = len(primal_vars)
-
-    if primal_objective == "max":
-        dual_problem = LpProblem("Dual_Problem", LpMinimize)
-        dual_vars = [LpVariable(f"y{i+1}", lowBound=0) for i in range(m)]
-        dual_problem += lpSum(constraints[i]["rhs"] * dual_vars[i] for i in range(m)), "Dual_Objective"
-        for j in range(n):
-            dual_problem += lpSum(constraints[i]["coeffs"][j] * dual_vars[i] for i in range(m)) >= c[j], f"Dual_Constraint_{j+1}"
-    elif primal_objective == "min":
-        dual_problem = LpProblem("Dual_Problem", LpMaximize)
-        dual_vars = [LpVariable(f"y{i+1}", lowBound=0) for i in range(m)]
-        dual_problem += lpSum(constraints[i]["rhs"] * dual_vars[i] for i in range(m)), "Dual_Objective"
-        for j in range(n):
-            dual_problem += lpSum(constraints[i]["coeffs"][j] * dual_vars[i] for i in range(m)) <= c[j], f"Dual_Constraint_{j+1}"
-    else:
-        raise ValueError("El tipo de objetivo debe ser 'max' o 'min'.")
-
-    dual_problem.solve()
-    dual_status = pulp.LpStatus[dual_problem.status]
-    dual_objective_value = value(dual_problem.objective)
-    variable_values = {var.name: value(var) for var in dual_problem.variables()}
-
-    return {
-        "status": dual_status,
-        "objective_value": dual_objective_value,
-        "variable_values": variable_values
-    }
+    primal_is_max = data["objective"] == "max"
+    c_primal = np.array(data["objective_coeffs"], dtype=float)
+    
+    A_ub, b_ub = [], []
+    for cons in data["constraints"]:
+        if cons["sign"] == "<=":
+            A_ub.append(cons["coeffs"])
+            b_ub.append(cons["rhs"])
+    
+    A = np.array(A_ub)
+    b = np.array(b_ub)
+    
+    # El Dual de un Max (Ax <= b) es un Min (A^T y >= c)
+    c_dual = b
+    b_dual = c_primal
+    A_dual = A.T 
+    
+    # Resolvemos el dual usando Simplex (convertido a <= para el solver)
+    solver = SimplexSolverV2(c_dual, A_ub=-A_dual, b_ub=-b_dual, maximization=not primal_is_max)
+    result = solver.solve('simplex')
+    
+    return jsonable_encoder(result)
