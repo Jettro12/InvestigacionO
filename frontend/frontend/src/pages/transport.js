@@ -3,10 +3,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { solveTransport } from "../services/transportService";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { Modal, Spinner } from "react-bootstrap";
+import { Spinner } from "react-bootstrap";
 import styles from "./modules.module.css";
 
-export default function TransportPage() {
+export default function TransportPage({ onResult, isModule }) {
   const [numSuppliers, setNumSuppliers] = useState(3);
   const [numDemands, setNumDemands] = useState(4);
   const [supply, setSupply] = useState(new Array(3).fill(""));
@@ -16,144 +16,67 @@ export default function TransportPage() {
   );
   const [method, setMethod] = useState("northwest");
   const [solution, setSolution] = useState(null);
-  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
   const router = useRouter();
 
-  // Actualizar dimensiones globalmente
-  const handleDimensionsChange = (newSuppliers, newDemands) => {
-    setNumSuppliers(newSuppliers);
-    setNumDemands(newDemands);
-    setSupply(new Array(newSuppliers).fill(""));
-    setDemand(new Array(newDemands).fill(""));
-    setCosts(
-      Array.from({ length: newSuppliers }, () =>
-        new Array(newDemands).fill(""),
-      ),
-    );
-    setValidationErrors({});
-    setSolution(null);
-  };
-
-  const validateForm = () => {
-    const errors = {};
-    if (supply.some((val) => val === "" || Number(val) < 0))
-      errors.supply = "La oferta no puede estar vacía o ser negativa";
-    if (demand.some((val) => val === "" || Number(val) < 0))
-      errors.demand = "La demanda no puede estar vacía o ser negativa";
-    if (
-      costs.some((row) => row.some((cost) => cost === "" || Number(cost) < 0))
-    )
-      errors.costs = "Todos los costos son requeridos";
-
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleCostChange = (i, j, value) => {
-    const newCosts = costs.map((row, rowIndex) =>
-      rowIndex === i
-        ? row.map((col, colIndex) => (colIndex === j ? value : col))
-        : row,
-    );
-    setCosts(newCosts);
+  const handleDimensionsChange = (ns, nd) => {
+    setNumSuppliers(ns);
+    setNumDemands(nd);
+    setSupply(new Array(ns).fill(""));
+    setDemand(new Array(nd).fill(""));
+    setCosts(Array.from({ length: ns }, () => new Array(nd).fill("")));
+    setSolution(null); // Limpiar solución previa al cambiar dimensiones
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
-
     setIsLoading(true);
-    setError(null);
+    const requestData = {
+      supply: supply.map(Number),
+      demand: demand.map(Number),
+      costs: costs.map((row) => row.map(Number)),
+      method,
+    };
 
     try {
-      const requestData = {
-        supply: supply.map(Number),
-        demand: demand.map(Number),
-        costs: costs.map((row) => row.map(Number)),
-        method,
-      };
       const result = await solveTransport(requestData);
       setSolution(result);
+      if (onResult && result?.status === "success") {
+        onResult({
+          costoTotal: result.total_cost,
+          capacidadTotal: supply.reduce((a, b) => a + Number(b), 0),
+          analisisResumen: `Costo logístico: $${result.total_cost}.`,
+          raw: result,
+        });
+      }
     } catch (err) {
-      setError(err.message || "Error al procesar el modelo.");
+      console.error("Error en la petición:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const renderMatrixTable = (matrix, title, color = "primary") => (
-    <div className="card mb-4 shadow-sm border-0">
-      <div className={`card-header bg-${color} text-white fw-bold`}>
-        {title}
-      </div>
-      <div className="card-body">
-        <div className="table-responsive">
-          <table className="table table-sm table-bordered">
-            <thead>
-              <tr className="bg-light text-center">
-                <th>Origen \ Destino</th>
-                {matrix[0].map((_, j) => (
-                  <th key={j}>D{j + 1}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {matrix.map((row, i) => (
-                <tr key={i}>
-                  <td className="fw-bold bg-light text-center">O{i + 1}</td>
-                  {row.map((cell, j) => (
-                    <td key={j} className="text-center">
-                      {cell > 0 ? (
-                        <span className="badge bg-success px-3">{cell}</span>
-                      ) : (
-                        <span className="text-muted">0</span>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-
-  const totalSupply = supply.reduce((sum, val) => sum + (Number(val) || 0), 0);
-  const totalDemand = demand.reduce((sum, val) => sum + (Number(val) || 0), 0);
-
   return (
     <div className={styles.moduleContainer}>
-      <div className={styles.headerSection}>
-        <div
-          className={
-            styles.headerContent +
-            " d-flex justify-content-between align-items-center"
-          }
-        >
-          <div>
-            <h1 className={styles.moduleTitle}>🚚 Problema de Transporte</h1>
-            <p className={styles.moduleSubtitle}>
-              Métodos Esquina Noroeste, Costo Mínimo y Vogel
-            </p>
+      {!isModule && (
+        <div className={styles.headerSection}>
+          <div className="d-flex justify-content-between align-items-center p-4 text-white">
+            <h1>🚚 Transporte</h1>
+            <button
+              onClick={() => router.push("/")}
+              className="btn btn-outline-light"
+            >
+              Volver
+            </button>
           </div>
-          <button
-            onClick={() => router.push("/")}
-            className="btn btn-outline-light"
-          >
-            Volver
-          </button>
         </div>
-      </div>
+      )}
 
       <div className="container py-4">
-        <div className="card shadow-sm p-4 mb-4 border-0">
-          <h4 className="mb-4">⚙️ Configuración</h4>
+        <div className="card shadow-sm p-4 mb-4">
           <div className="row g-3">
             <div className="col-md-4">
-              <label className="form-label fw-bold">Cant. Orígenes</label>
+              <label className="fw-bold">Orígenes</label>
               <input
                 type="number"
                 className="form-control"
@@ -161,12 +84,10 @@ export default function TransportPage() {
                 onChange={(e) =>
                   handleDimensionsChange(Number(e.target.value), numDemands)
                 }
-                min="1"
-                max="10"
               />
             </div>
             <div className="col-md-4">
-              <label className="form-label fw-bold">Cant. Destinos</label>
+              <label className="fw-bold">Destinos</label>
               <input
                 type="number"
                 className="form-control"
@@ -174,230 +95,126 @@ export default function TransportPage() {
                 onChange={(e) =>
                   handleDimensionsChange(numSuppliers, Number(e.target.value))
                 }
-                min="1"
-                max="10"
               />
             </div>
             <div className="col-md-4">
-              <label className="form-label fw-bold">Método Inicial</label>
+              <label className="fw-bold">Método</label>
               <select
                 className="form-select"
                 value={method}
                 onChange={(e) => setMethod(e.target.value)}
               >
-                <option value="northwest">Esquina Noroeste</option>
+                <option value="northwest">Noroeste</option>
                 <option value="minimum_cost">Costo Mínimo</option>
-                <option value="vogel">Vogel (Penalizaciones)</option>
+                <option value="vogel">Vogel</option>
               </select>
             </div>
           </div>
         </div>
 
-        <div className="card shadow-sm p-4 mb-4 border-0">
-          <h4 className="text-primary mb-3">📋 Matriz de Costos y Balance</h4>
-          <div className="table-responsive">
-            <table className="table table-bordered">
-              <thead className="table-dark text-center">
-                <tr>
-                  <th>Origen / Destino</th>
-                  {demand.map((_, j) => (
-                    <th key={j}>Destino {j + 1}</th>
-                  ))}
-                  <th className="bg-success text-white">Oferta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {costs.map((row, i) => (
-                  <tr key={i}>
-                    <td className="fw-bold bg-light">Origen {i + 1}</td>
-                    {row.map((cost, j) => (
-                      <td key={j}>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm"
-                          value={cost}
-                          onChange={(e) =>
-                            handleCostChange(i, j, e.target.value)
-                          }
-                        />
-                      </td>
-                    ))}
-                    <td>
-                      <input
-                        type="number"
-                        className="form-control form-control-sm border-success"
-                        value={supply[i]}
-                        onChange={(e) => {
-                          const next = [...supply];
-                          next[i] = e.target.value;
-                          setSupply(next);
-                        }}
-                      />
-                    </td>
-                  </tr>
+        <div className="card shadow-sm p-4 overflow-auto">
+          <table className="table table-bordered">
+            <thead className="table-dark text-center">
+              <tr>
+                <th>O \ D</th>
+                {demand.map((_, j) => (
+                  <th key={j}>D{j + 1}</th>
                 ))}
-                <tr>
-                  <td className="fw-bold bg-danger text-white">Demanda</td>
-                  {demand.map((val, j) => (
+                <th className="bg-success">Oferta</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costs.map((row, i) => (
+                <tr key={i}>
+                  <td className="fw-bold bg-light text-center">O{i + 1}</td>
+                  {row.map((cost, j) => (
                     <td key={j}>
                       <input
                         type="number"
-                        className="form-control form-control-sm border-danger"
-                        value={val}
+                        className="form-control form-control-sm"
+                        value={cost}
                         onChange={(e) => {
-                          const next = [...demand];
-                          next[j] = e.target.value;
-                          setDemand(next);
+                          const next = [...costs];
+                          next[i][j] = e.target.value;
+                          setCosts(next);
                         }}
                       />
                     </td>
                   ))}
-                  <td
-                    className={`fw-bold text-center ${totalSupply === totalDemand ? "text-success" : "text-warning"}`}
-                  >
-                    {totalSupply} / {totalDemand}
+                  <td>
+                    <input
+                      type="number"
+                      className="form-control border-success text-center"
+                      value={supply[i]}
+                      onChange={(e) => {
+                        const next = [...supply];
+                        next[i] = e.target.value;
+                        setSupply(next);
+                      }}
+                    />
                   </td>
                 </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {totalSupply !== totalDemand && (
-            <div className="alert alert-info mt-3 small">
-              ℹ️ <strong>Problema no balanceado:</strong> El algoritmo añadirá
-              automáticamente un nodo ficticio para equilibrar la oferta y
-              demanda.
-            </div>
-          )}
-
-          <div className="text-center mt-4">
-            <button
-              className="btn btn-primary btn-lg px-5"
-              onClick={handleSubmit}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Spinner size="sm" className="me-2" />
-              ) : (
-                "🚀 Calcular Optimización"
-              )}
-            </button>
-          </div>
+              ))}
+              <tr>
+                <td className="bg-danger text-white fw-bold text-center">
+                  Demanda
+                </td>
+                {demand.map((val, j) => (
+                  <td key={j}>
+                    <input
+                      type="number"
+                      className="form-control border-danger text-center"
+                      value={val}
+                      onChange={(e) => {
+                        const next = [...demand];
+                        next[j] = e.target.value;
+                        setDemand(next);
+                      }}
+                    />
+                  </td>
+                ))}
+                <td className="text-center fw-bold bg-light">Σ</td>
+              </tr>
+            </tbody>
+          </table>
+          <button
+            className="btn btn-primary w-100 fw-bold shadow-sm"
+            onClick={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? <Spinner size="sm" /> : "🚀 Calcular Transporte"}
+          </button>
         </div>
 
-        {error && <div className="alert alert-danger shadow-sm">{error}</div>}
-
         {solution && (
-          <div className="fade-in">
-            <div className="row g-3 mb-4">
-              <div className="col-md-6">
-                <div className="card border-0 shadow-sm bg-light p-3 text-center">
-                  <span className="text-muted">Costo Inicial</span>
-                  <h3 className="fw-bold text-warning">
-                    ${solution.initial_cost?.toLocaleString()}
-                  </h3>
-                </div>
-              </div>
-              <div className="col-md-6">
-                <div className="card border-0 shadow-sm bg-primary text-white p-3 text-center">
-                  <span className="opacity-75">Costo Óptimo Final</span>
-                  <h3 className="fw-bold">
-                    ${solution.total_cost?.toLocaleString()}
-                  </h3>
-                </div>
-              </div>
+          <div className="mt-4 animate__animated animate__fadeIn">
+            <div className="p-3 bg-primary text-white rounded shadow-sm text-center mb-4">
+              <h3 className="mb-0 fw-bold">
+                {/* SOLUCIÓN AL ERROR: Uso de opcional chaining ?. y fallback a "0" */}
+                Costo Óptimo: ${solution.total_cost?.toLocaleString() ?? "0"}
+              </h3>
             </div>
 
-            {renderMatrixTable(
-              solution.optimal_solution,
-              "🏆 Asignación Óptima de Recursos (Matriz de Flujos)",
-              "success",
-            )}
-
-            {solution.sensitivity_analysis && (
-              <div
-                className="card border-0 shadow-lg p-4 bg-gradient mt-4"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #f5f7fa 0%, #e8eef7 100%)",
-                }}
-              >
-                <h5 className="mb-4">
-                  🤖 Análisis de Sensibilidad e Interpretación
-                </h5>
-
-                {/* Información del costo */}
-                <div className="row mb-4">
-                  <div className="col-md-6">
-                    <div className="p-3 bg-warning text-dark rounded">
-                      <small className="text-muted">Costo Inicial</small>
-                      <h6 className="fw-bold mb-0">
-                        ${solution.initial_cost?.toLocaleString()}
-                      </h6>
-                    </div>
+            {(solution.sensitivity_analysis ||
+              solution.intelligent_analysis) && (
+              <div className="card border-0 shadow-sm mt-4 bg-light">
+                <div className="card-body">
+                  <h5 className="text-primary fw-bold mb-3 d-flex align-items-center">
+                    <span className="me-2">🤖</span> Análisis de Sensibilidad e
+                    Interpretación
+                  </h5>
+                  <div
+                    className="p-3 bg-white rounded border shadow-inner"
+                    style={{
+                      whiteSpace: "pre-line",
+                      fontSize: "14.5px",
+                      lineHeight: "1.6",
+                      color: "#333",
+                    }}
+                  >
+                    {solution.sensitivity_analysis ||
+                      solution.intelligent_analysis}
                   </div>
-                  <div className="col-md-6">
-                    <div className="p-3 bg-success text-white rounded">
-                      <small>Costo Óptimo</small>
-                      <h6 className="fw-bold mb-0">
-                        ${solution.total_cost?.toLocaleString()}
-                      </h6>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Análisis de texto con resaltes visuales */}
-                <div
-                  className="p-4 bg-white rounded"
-                  style={{ lineHeight: "1.8" }}
-                >
-                  {typeof solution.sensitivity_analysis === "string"
-                    ? solution.sensitivity_analysis
-                        .split("\n")
-                        .filter((line) => line.trim())
-                        .map((line, idx) => {
-                          let bgColor = "";
-                          let borderColor = "";
-                          let icon = "";
-
-                          if (line.includes("[CRÍTICO]")) {
-                            bgColor = "#fff5f5";
-                            borderColor = "#dc3545";
-                            icon = "🔴";
-                          } else if (line.includes("[RECOMENDACIÓN]")) {
-                            bgColor = "#f0fdf4";
-                            borderColor = "#28a745";
-                            icon = "✅";
-                          } else if (line.includes("[RIESGO]")) {
-                            bgColor = "#fffbf0";
-                            borderColor = "#ffc107";
-                            icon = "⚠️";
-                          }
-
-                          return (
-                            <div
-                              key={idx}
-                              className="mb-3 p-3 rounded"
-                              style={{
-                                backgroundColor: bgColor || "transparent",
-                                borderLeft: borderColor
-                                  ? `4px solid ${borderColor}`
-                                  : "none",
-                              }}
-                            >
-                              <p className="mb-0 text-secondary">
-                                {icon && (
-                                  <span className="me-2 fw-bold">{icon}</span>
-                                )}
-                                {line.replace(
-                                  /\[(CRÍTICO|RECOMENDACIÓN|RIESGO)\]/g,
-                                  "",
-                                )}
-                              </p>
-                            </div>
-                          );
-                        })
-                    : solution.sensitivity_analysis}
                 </div>
               </div>
             )}
