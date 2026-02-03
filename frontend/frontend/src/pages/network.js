@@ -6,7 +6,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal, Spinner, Badge } from "react-bootstrap";
 import styles from "./modules.module.css";
 
-export default function NetworkPage() {
+export default function NetworkPage({ onResult, isModule }) {
   const [graph, setGraph] = useState([]);
   const [solution, setSolution] = useState(null);
   const [edgeData, setEdgeData] = useState({
@@ -15,116 +15,79 @@ export default function NetworkPage() {
     weight: "",
     capacity: "",
   });
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [showModal, setShowModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
   const router = useRouter();
 
-  const validateForm = () => {
-    const errors = {};
-    const nodes = new Set(graph.flatMap(([u, v]) => [u, v]));
-
-    if (graph.length === 0) errors.graph = "Agregue al menos una arista.";
-    else if (nodes.size < 2)
-      errors.graph = "Se requieren al menos 2 nodos distintos.";
-
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
   const addEdge = () => {
-    const { from, to, weight, capacity } = edgeData;
-    const cleanFrom = from.trim().toUpperCase();
-    const cleanTo = to.trim().toUpperCase();
-
-    if (!cleanFrom || !cleanTo || weight === "" || capacity === "") {
-      setValidationErrors({ edge: "Todos los campos son obligatorios" });
-      return;
-    }
-
-    if (cleanFrom === cleanTo) {
-      setValidationErrors({ edge: "No se permiten bucles (Origen = Destino)" });
-      return;
-    }
-
-    // Evitar duplicados
-    if (graph.some(([u, v]) => u === cleanFrom && v === cleanTo)) {
-      setValidationErrors({ edge: "Esta conexión ya existe" });
-      return;
-    }
-
+    if (!edgeData.from || !edgeData.to) return;
     setGraph([
       ...graph,
-      [cleanFrom, cleanTo, parseFloat(weight), parseFloat(capacity)],
+      [
+        edgeData.from.toUpperCase(),
+        edgeData.to.toUpperCase(),
+        parseFloat(edgeData.weight || 0),
+        parseFloat(edgeData.capacity || 0),
+      ],
     ]);
     setEdgeData({ from: "", to: "", weight: "", capacity: "" });
-    setValidationErrors({});
+    setSolution(null); // Limpiar resultados previos al cambiar el grafo
   };
 
   const removeEdge = (index) => {
     setGraph(graph.filter((_, i) => i !== index));
+    setSolution(null);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
+  const handleSubmit = async () => {
     setIsLoading(true);
     try {
       const result = await solveNetwork({ graph });
       setSolution(result);
-      setValidationErrors({});
+
+      if (onResult) {
+        onResult({
+          flujoTotal: result.max_flow?.max_flow || 0,
+          analisisResumen: result.max_flow
+            ? `Flujo máximo de la red: ${result.max_flow.max_flow} unidades.`
+            : "Red optimizada.",
+          raw: result,
+        });
+      }
     } catch (err) {
-      setValidationErrors({ submit: err.message || "Error en el servidor" });
+      console.error("Error al resolver la red:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const metodoNombres = {
-    shortest_path: "Ruta Más Corta",
-    mst: "Árbol de Expansión Mínima (MST)",
-    max_flow: "Flujo Máximo",
-    min_cost_flow: "Flujo de Costo Mínimo",
-  };
-
   return (
     <div className={styles.moduleContainer}>
-      <div className={styles.headerSection}>
-        <div
-          className={
-            styles.headerContent +
-            " d-flex justify-content-between align-items-center"
-          }
-        >
-          <div>
-            <h1 className={styles.moduleTitle}>🔗 Optimización en Redes</h1>
-            <p className={styles.moduleSubtitle}>
-              Algoritmos de Grafos para Logística y Redes
-            </p>
+      {/* Header adaptable */}
+      {!isModule && (
+        <div className={styles.headerSection}>
+          <div className="d-flex justify-content-between align-items-center p-4 text-white">
+            <h1 className={styles.moduleTitle}>🌐 Optimización en Redes</h1>
+            <button
+              onClick={() => router.push("/")}
+              className="btn btn-outline-light"
+            >
+              Regresar
+            </button>
           </div>
-          <button
-            onClick={() => router.push("/")}
-            className="btn btn-outline-light"
-          >
-            Regresar
-          </button>
         </div>
-      </div>
+      )}
 
       <div className="container py-4">
-        <div className="row g-4">
-          {/* Configuración */}
-          <div className="col-lg-5">
+        <div className="row g-3">
+          {/* Formulario de Entrada */}
+          <div className="col-md-5">
             <div className="card shadow-sm p-4 border-0">
-              <h5 className="text-primary mb-3">🛠️ Nueva Conexión</h5>
+              <h6 className="text-primary fw-bold mb-3">🛠️ Nueva Conexión</h6>
               <div className="row g-2">
                 <div className="col-6">
                   <input
-                    type="text"
-                    className="form-control"
                     placeholder="Origen"
+                    className="form-control"
                     value={edgeData.from}
                     onChange={(e) =>
                       setEdgeData({ ...edgeData, from: e.target.value })
@@ -133,9 +96,8 @@ export default function NetworkPage() {
                 </div>
                 <div className="col-6">
                   <input
-                    type="text"
-                    className="form-control"
                     placeholder="Destino"
+                    className="form-control"
                     value={edgeData.to}
                     onChange={(e) =>
                       setEdgeData({ ...edgeData, to: e.target.value })
@@ -144,9 +106,9 @@ export default function NetworkPage() {
                 </div>
                 <div className="col-6">
                   <input
+                    placeholder="Costo"
                     type="number"
                     className="form-control"
-                    placeholder="Peso/Costo"
                     value={edgeData.weight}
                     onChange={(e) =>
                       setEdgeData({ ...edgeData, weight: e.target.value })
@@ -155,237 +117,125 @@ export default function NetworkPage() {
                 </div>
                 <div className="col-6">
                   <input
+                    placeholder="Capacidad"
                     type="number"
                     className="form-control"
-                    placeholder="Capacidad"
                     value={edgeData.capacity}
                     onChange={(e) =>
                       setEdgeData({ ...edgeData, capacity: e.target.value })
                     }
                   />
                 </div>
-                <div className="col-12 mt-2">
-                  <button className="btn btn-primary w-100" onClick={addEdge}>
-                    Agregar Arista
-                  </button>
-                </div>
               </div>
-              {validationErrors.edge && (
-                <div className="text-danger small mt-2">
-                  {validationErrors.edge}
-                </div>
-              )}
-
-              <hr />
-              <div className="d-flex justify-content-between align-items-center">
-                <span>
-                  Nodos:{" "}
-                  <strong>
-                    {new Set(graph.flatMap((e) => [e[0], e[1]])).size}
-                  </strong>
-                </span>
-                <button
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={() => setGraph([])}
-                >
-                  Limpiar Grafo
-                </button>
-              </div>
+              <button
+                className="btn btn-primary w-100 mt-3 fw-bold"
+                onClick={addEdge}
+              >
+                Agregar Arista
+              </button>
             </div>
           </div>
 
-          {/* Listado de Aristas */}
-          <div className="col-lg-7">
+          {/* Listado de Aristas / Grafo */}
+          <div className="col-md-7">
             <div
               className="card shadow-sm p-4 border-0"
-              style={{ minHeight: "250px" }}
+              style={{ minHeight: "220px" }}
             >
-              <h5 className="mb-3">📌 Estructura de la Red</h5>
-              <div className="d-flex flex-wrap gap-2">
-                {graph.map(([u, v, w, c], i) => (
-                  <Badge
-                    key={i}
-                    bg="light"
-                    text="dark"
-                    className="border p-2 d-flex align-items-center gap-2"
-                  >
-                    <span className="text-primary fw-bold">{u}</span> →
-                    <span className="text-success fw-bold">{v}</span>
-                    <span className="text-muted small">
-                      | W:{w} C:{c}
+              <h6 className="fw-bold mb-3">📌 Estructura de la Red</h6>
+              <div className="d-flex flex-wrap gap-2 mb-4">
+                {graph.map((e, i) => (
+                  <Badge key={i} bg="light" text="dark" className="border p-2">
+                    <span className="text-primary">{e[0]}</span> →{" "}
+                    <span className="text-success">{e[1]}</span>
+                    <span className="ms-2 text-muted small">
+                      (W:{e[2]} C:{e[3]})
                     </span>
                     <span
-                      className="text-danger ms-2 cursor-pointer"
+                      className="ms-2 text-danger"
                       style={{ cursor: "pointer" }}
                       onClick={() => removeEdge(i)}
                     >
-                      ✕
+                      {" "}
+                      ×{" "}
                     </span>
                   </Badge>
                 ))}
                 {graph.length === 0 && (
-                  <p className="text-muted italic">No hay aristas definidas.</p>
+                  <p className="text-muted small italic">
+                    No hay conexiones definidas.
+                  </p>
                 )}
               </div>
+              <button
+                className="btn btn-success mt-auto fw-bold py-2 shadow-sm"
+                onClick={handleSubmit}
+                disabled={isLoading || graph.length === 0}
+              >
+                {isLoading ? (
+                  <Spinner size="sm" className="me-2" />
+                ) : (
+                  "🚀 Calcular Optimización"
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="text-center my-4">
-          <button
-            className="btn btn-success btn-lg px-5 shadow"
-            onClick={handleSubmit}
-            disabled={isLoading || graph.length === 0}
-          >
-            {isLoading ? (
-              <Spinner size="sm" className="me-2" />
-            ) : (
-              "🚀 Calcular Optimización"
-            )}
-          </button>
-        </div>
-
-        {/* Resultados */}
+        {/* Sección de Resultados */}
         {solution && (
-          <div>
-            <div className="row g-4 mt-2">
-              {Object.entries(metodoNombres).map(([key, label]) => {
-                const res = solution[key];
-                if (!res) return null;
-                return (
-                  <div key={key} className="col-md-6">
-                    <div className="card shadow-sm border-0 h-100">
-                      <div className="card-header bg-white fw-bold">
-                        {label}
-                      </div>
-                      <div className="card-body text-center">
-                        <div className="mb-3 p-2 bg-light rounded">
-                          {key === "max_flow"
-                            ? `Flujo: ${res.max_flow}`
-                            : key === "min_cost_flow"
-                              ? `Costo: ${res.min_cost}`
-                              : `Peso Total: ${res.total_weight}`}
-                        </div>
-                        {res.graph_image && (
-                          <img
-                            src={`data:image/png;base64,${res.graph_image}`}
-                            className="img-fluid rounded cursor-pointer shadow-sm hover-zoom"
-                            alt={label}
-                            onClick={() => {
-                              setSelectedImage(res);
-                              setShowModal(true);
-                            }}
-                          />
-                        )}
-                      </div>
-                    </div>
+          <div className="mt-4 animate__animated animate__fadeIn">
+            {/* Mostrar Flujo Máximo si existe en la respuesta */}
+            {solution.max_flow && (
+              <div className="alert alert-info shadow-sm text-center py-3">
+                <h4 className="mb-0 fw-bold">
+                  Flujo Máximo Detectado: {solution.max_flow.max_flow ?? "0"}
+                </h4>
+              </div>
+            )}
+
+            {/* ANÁLISIS DE SENSIBILIDAD INDIVIDUAL (IA) */}
+            {(solution.shortest_path?.sensitivity_analysis_gemini ||
+              solution.intelligent_analysis) && (
+              <div className="card border-0 shadow-sm mt-4 bg-light">
+                <div className="card-body">
+                  <h5 className="text-primary fw-bold mb-3 d-flex align-items-center">
+                    <span className="me-2">🤖</span> Análisis de Sensibilidad de
+                    Red
+                  </h5>
+                  <div
+                    className="p-3 bg-white rounded border shadow-inner"
+                    style={{
+                      whiteSpace: "pre-line",
+                      fontSize: "14.5px",
+                      lineHeight: "1.6",
+                      color: "#333",
+                    }}
+                  >
+                    {solution.shortest_path?.sensitivity_analysis_gemini ||
+                      solution.intelligent_analysis}
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Análisis Inteligente - Shortest Path */}
-            {solution.shortest_path?.sensitivity_analysis_gemini && (
-              <div
-                className="card border-0 shadow-lg p-4 bg-gradient mt-4"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #f5f7fa 0%, #e8eef7 100%)",
-                }}
-              >
-                <h5 className="mb-4">
-                  🤖 Análisis de Sensibilidad e Interpretación (Ruta Más Corta)
-                </h5>
-
-                {/* Información de la ruta */}
-                {solution.shortest_path?.total_weight && (
-                  <div className="mb-4 p-3 bg-primary text-white rounded">
-                    <small>Peso Total de la Ruta</small>
-                    <h6 className="fw-bold mb-0">
-                      {solution.shortest_path.total_weight}
-                    </h6>
-                  </div>
-                )}
-
-                {/* Análisis de texto con resaltes visuales */}
-                <div
-                  className="p-4 bg-white rounded"
-                  style={{ lineHeight: "1.8" }}
-                >
-                  {typeof solution.shortest_path.sensitivity_analysis_gemini ===
-                  "string"
-                    ? solution.shortest_path.sensitivity_analysis_gemini
-                        .split("\n")
-                        .filter((line) => line.trim())
-                        .map((line, idx) => {
-                          let bgColor = "";
-                          let borderColor = "";
-                          let icon = "";
-
-                          if (line.includes("[CRÍTICO]")) {
-                            bgColor = "#fff5f5";
-                            borderColor = "#dc3545";
-                            icon = "🔴";
-                          } else if (line.includes("[RECOMENDACIÓN]")) {
-                            bgColor = "#f0fdf4";
-                            borderColor = "#28a745";
-                            icon = "✅";
-                          } else if (line.includes("[RIESGO]")) {
-                            bgColor = "#fffbf0";
-                            borderColor = "#ffc107";
-                            icon = "⚠️";
-                          }
-
-                          return (
-                            <div
-                              key={idx}
-                              className="mb-3 p-3 rounded"
-                              style={{
-                                backgroundColor: bgColor || "transparent",
-                                borderLeft: borderColor
-                                  ? `4px solid ${borderColor}`
-                                  : "none",
-                              }}
-                            >
-                              <p className="mb-0 text-secondary">
-                                {icon && (
-                                  <span className="me-2 fw-bold">{icon}</span>
-                                )}
-                                {line.replace(
-                                  /\[(CRÍTICO|RECOMENDACIÓN|RIESGO)\]/g,
-                                  "",
-                                )}
-                              </p>
-                            </div>
-                          );
-                        })
-                    : solution.shortest_path.sensitivity_analysis_gemini}
                 </div>
+              </div>
+            )}
+
+            {/* Imagen del Grafo si el backend la genera */}
+            {solution.shortest_path?.graph_image && (
+              <div className="text-center mt-4 card p-3 border-0 shadow-sm">
+                <h6 className="fw-bold mb-3 text-muted text-uppercase small">
+                  Visualización de la Red Optimizada
+                </h6>
+                <img
+                  src={`data:image/png;base64,${solution.shortest_path.graph_image}`}
+                  alt="Grafo optimizado"
+                  className="img-fluid rounded"
+                  style={{ maxHeight: "400px", objectFit: "contain" }}
+                />
               </div>
             )}
           </div>
         )}
       </div>
-
-      <Modal
-        show={showModal}
-        onHide={() => setShowModal(false)}
-        size="lg"
-        centered
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>Visualización Detallada</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="text-center p-0">
-          {selectedImage && (
-            <img
-              src={`data:image/png;base64,${selectedImage.graph_image}`}
-              className="w-100"
-              alt="Full"
-            />
-          )}
-        </Modal.Body>
-      </Modal>
     </div>
   );
 }
