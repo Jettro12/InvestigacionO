@@ -68,10 +68,19 @@ Presenta en texto limpio y comprensible."""
 def solve_optimization_network(problem_type, data):
     print(f">>> solve_optimization_network llamado con problem_type={problem_type}")
     graph = data["graph"]
+    
+    # Obtener cálculos básicos del archivo algorithms/network_optimization.py
     results = solve_all_problems(graph)
-    # Agregar análisis de sensibilidad solo a shortest_path
+    
+    # Definir nodos inicio y fin
     start_node = graph[0][0]
     end_node = graph[-1][1]
-    results["shortest_path"]["sensitivity_analysis"] = sensitivity_analysis_shortest_path(graph, start_node, end_node)
-    results["shortest_path"]["sensitivity_analysis_gemini"] = gemini_network_sensitivity_analysis(graph, results["shortest_path"])
+    
+    # 1. Análisis de Sensibilidad Numérico (para la tabla)
+    results["sensitivity"] = sensitivity_analysis_shortest_path(graph, start_node, end_node)
+    
+    # 2. Análisis de IA con Groq (para el cuadro de texto)
+    # IMPORTANTE: Guardarlo en la raíz como 'intelligent_analysis'
+    results["intelligent_analysis"] = gemini_network_sensitivity_analysis(graph, results["shortest_path"])
+    
     return results

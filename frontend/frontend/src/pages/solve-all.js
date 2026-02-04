@@ -27,47 +27,51 @@ export default function SolveAll() {
 
   // Renderiza el análisis de sensibilidad detallado de cada módulo
   const renderIndividualSensitivity = () => {
-    return (
-      <div className="row g-4 mb-5">
-        {tabs.map((tab) => (
-          <div className="col-12" key={tab.id}>
-            <div
-              className={`card shadow-sm border-0 ${results[tab.id] ? "border-start border-primary border-4" : ""}`}
-            >
-              <div className="card-header bg-light d-flex align-items-center">
-                <span className="me-2 fs-4">{tab.icon}</span>
-                <h5 className="mb-0 fw-bold">
-                  Análisis de Sensibilidad: {tab.name}
-                </h5>
-              </div>
-              <div className="card-body">
-                {results[tab.id] ? (
-                  <div
-                    className="text-secondary"
-                    style={{ whiteSpace: "pre-line" }}
-                  >
-                    {/* Mostramos el análisis inteligente detallado del raw data si existe */}
-                    {results[tab.id].raw?.intelligent_analysis ||
-                      results[tab.id].raw?.sensitivity_analysis ||
-                      results[tab.id].raw?.shortest_path
-                        ?.sensitivity_analysis_gemini ||
-                      results[tab.id].analisisResumen}
-                  </div>
-                ) : (
-                  <div className="text-center py-3 text-muted">
-                    <small>
-                      Resuelve este módulo para visualizar el análisis
-                      detallado.
-                    </small>
-                  </div>
-                )}
-              </div>
+  return (
+    <div className="row g-4 mb-5">
+      {tabs.map((tab) => (
+        <div className="col-12" key={tab.id}>
+          <div className={`card shadow-sm border-0 ${results[tab.id] ? "border-start border-primary border-4" : ""}`}>
+            <div className="card-header bg-light d-flex align-items-center">
+              <span className="me-2 fs-4">{tab.icon}</span>
+              <h5 className="mb-0 fw-bold">Análisis: {tab.name}</h5>
+            </div>
+            <div className="card-body">
+              {results[tab.id] ? (
+                <Row>
+                  <Col md={results[tab.id].raw?.shortest_path?.graph_image ? 8 : 12}>
+                    <div className="text-secondary" style={{ whiteSpace: "pre-line" }}>
+                      {results[tab.id].raw?.intelligent_analysis || 
+                       results[tab.id].raw?.shortest_path?.sensitivity_analysis_gemini ||
+                       results[tab.id].analisisResumen}
+                    </div>
+                  </Col>
+                  
+                  {/* AQUÍ SE RENDERIZA EL GRÁFICO EN EL REPORTE FINAL */}
+                  {results[tab.id].raw?.shortest_path?.graph_image && (
+                    <Col md={4} className="text-center border-start">
+                      <img 
+                        src={`data:image/png;base64,${results[tab.id].raw.shortest_path.graph_image}`}
+                        alt="Vista previa del grafo"
+                        className="img-fluid rounded shadow-sm"
+                        style={{ maxHeight: "200px" }}
+                      />
+                      <p className="small text-muted mt-2">Grafo de Optimización</p>
+                    </Col>
+                  )}
+                </Row>
+              ) : (
+                <div className="text-center py-3 text-muted">
+                  <small>Resuelve el módulo para ver el análisis y gráfico.</small>
+                </div>
+              )}
             </div>
           </div>
-        ))}
-      </div>
-    );
-  };
+        </div>
+      ))}
+    </div>
+  );
+};
 
   // Lógica de Análisis Conjunto Detallado (Cross-Model Analysis)
   const renderCrossModelAnalysis = () => {
