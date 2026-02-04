@@ -5,7 +5,7 @@ from fastapi.encoders import jsonable_encoder
 
 matplotlib.use('Agg')  # Backend no interactivo para servidores
 import matplotlib.pyplot as plt
-from algorithms.linear_programming_v2 import SimplexSolverV2
+from app.algorithms.linear_programming_v2 import SimplexSolverV2
 
 def solve_linear_problem(data):
     """

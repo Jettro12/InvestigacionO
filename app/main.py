@@ -2,10 +2,11 @@ print(">>> CARGANDO app/main.py")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import optimization_routes
-from routes.optimization_routes_network import router as network_router  # ✅ Importa la ruta de redes
+import os
+from app.routes import optimization_routes
+from app.routes.optimization_routes_network import router as network_router  # ✅ Importa la ruta de redes
 from fastapi.staticfiles import StaticFiles
-from routes.linear_solver import router as linear_solver_router
+from app.routes.linear_solver import router as linear_solver_router
 
 print(">>> Creando instancia de FastAPI")
 app = FastAPI(title="Optimization API")
@@ -18,7 +19,12 @@ app.add_middleware(
     allow_methods=["*"],  # Permite todos los métodos (GET, POST, OPTIONS, etc.)
     allow_headers=["*"],  # Permite todos los headers
 )
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Configurar ruta absoluta para la carpeta static
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 print(">>> Incluyendo rutas de optimization_routes")
 app.include_router(optimization_routes.router, prefix="/api")

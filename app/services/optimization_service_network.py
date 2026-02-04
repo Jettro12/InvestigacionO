@@ -3,7 +3,11 @@ print(">>> CARGANDO app/services/optimization_service_network.py")
 from groq import Groq
 import os
 from dotenv import load_dotenv
-load_dotenv()
+
+# Cargar .env desde la carpeta app
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 # Cargar API key desde .env
 API_KEY = os.getenv("GROQ_API_KEY")
 if API_KEY:
@@ -13,7 +17,7 @@ else:
     print("❌ ERROR: GROQ_API_KEY no está configurada en .env")
     client = None
 
-from algorithms.network_optimization import (
+from app.algorithms.network_optimization import (
     solve_all_problems, sensitivity_analysis_shortest_path
 )
 

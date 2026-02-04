@@ -1,18 +1,21 @@
-from algorithms.linear_programming import solve_linear_program
+from app.algorithms.linear_programming import solve_linear_program
 import numpy as np
 from groq import Groq
 import os
 from dotenv import load_dotenv
-load_dotenv()
 
-from algorithms.transportation import (
+# Cargar .env desde la carpeta app
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+from app.algorithms.transportation import (
     balance_transportation_problem,
     northwest_corner_method,
     minimum_cost_method,
     vogel_approximation_method,
     modi_method
 )
-from algorithms.network_optimization import dijkstra_algorithm
+from app.algorithms.network_optimization import dijkstra_algorithm
 
 # Configurar Groq AI con API key del .env
 API_KEY = os.getenv("GROQ_API_KEY")

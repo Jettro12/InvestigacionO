@@ -1,7 +1,10 @@
 from groq import Groq
 import os
 from dotenv import load_dotenv
-load_dotenv()
+
+# Cargar .env desde la carpeta app
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # Configurar Groq AI
 API_KEY = os.getenv("GROQ_API_KEY")
@@ -12,7 +15,7 @@ else:
     client = None
 
 def analyze_sensitivity(data, solution):
-    from models.linear_program import solve_linear_problem  # Importación dentro de la función
+    from app.models.linear_program import solve_linear_problem  # Importación dentro de la función
 
     perturbation = 0.01
     sensitivities = {}

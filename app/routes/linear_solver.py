@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 # Eliminamos las funciones que ya no existen en models.linear_program
-from models.linear_program import solve_linear_problem, solve_graphical, solve_dual_linear_problem
-from utils.validations import validate_linear_problem
-from utils.sensitivity_analysis import analyze_sensitivity, generate_intelligent_sensitivity_analysis
+from app.models.linear_program import solve_linear_problem, solve_graphical, solve_dual_linear_problem
+from app.utils.validations import validate_linear_problem
+from app.utils.sensitivity_analysis import analyze_sensitivity, generate_intelligent_sensitivity_analysis
 
 router = APIRouter()
 
