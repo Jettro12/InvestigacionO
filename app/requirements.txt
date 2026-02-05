@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+matplotlib
+numpy
+pydantic
+groq
+python-dotenv
+Pillow
+networkx
