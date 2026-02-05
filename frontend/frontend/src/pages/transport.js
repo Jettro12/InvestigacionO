@@ -188,12 +188,109 @@ export default function TransportPage({ onResult, isModule }) {
 
         {solution && (
           <div className="mt-4 animate__animated animate__fadeIn">
-            <div className="p-3 bg-primary text-white rounded shadow-sm text-center mb-4">
-              <h3 className="mb-0 fw-bold">
-                {/* SOLUCIÓN AL ERROR: Uso de opcional chaining ?. y fallback a "0" */}
-                Costo Óptimo: ${solution.total_cost?.toLocaleString() ?? "0"}
-              </h3>
+            {/* Tarjetas de Resumen de Costos */}
+            <div className="row g-3 mb-4">
+              <div className="col-md-6">
+                <div className="p-3 bg-secondary text-white rounded shadow-sm text-center">
+                  <h5 className="mb-1">Costo Inicial ({method})</h5>
+                  <h3 className="mb-0 fw-bold">
+                    ${solution.initial_cost?.toLocaleString() ?? "0"}
+                  </h3>
+                </div>
+              </div>
+              <div className="col-md-6">
+                <div className="p-3 bg-primary text-white rounded shadow-sm text-center">
+                  <h5 className="mb-1">Costo Óptimo (MODI)</h5>
+                  <h3 className="mb-0 fw-bold">
+                    ${solution.total_cost?.toLocaleString() ?? "0"}
+                  </h3>
+                </div>
+              </div>
             </div>
+
+            {/* Matriz de Solución Óptima */}
+            {solution.optimal_solution && (
+              <div className="card shadow-sm p-4 mb-4">
+                <h4 className="fw-bold mb-3 text-success">
+                  📦 Distribución Óptima de Envíos
+                </h4>
+                <div className="table-responsive">
+                  <table className="table table-bordered table-striped text-center">
+                    <thead className="table-dark">
+                      <tr>
+                        <th>Origen \ Destino</th>
+                        {solution.optimal_solution[0].map((_, j) => (
+                          <th key={j}>
+                            {j < numDemands ? `D${j + 1}` : "Ficticio"}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {solution.optimal_solution.map((row, i) => (
+                        <tr key={i}>
+                          <td className="fw-bold bg-light">
+                            {i < numSuppliers ? `O${i + 1}` : "Ficticio"}
+                          </td>
+                          {row.map((val, j) => (
+                            <td
+                              key={j}
+                              className={
+                                val > 0 ? "bg-success text-white fw-bold" : ""
+                              }
+                            >
+                              {val}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Matriz de Solución Inicial (Desplegable o visible) */}
+            {solution.initial_solution && (
+              <div className="card shadow-sm p-4 mb-4">
+                <h5 className="fw-bold mb-3 text-muted">
+                  📄 Solución Inicial ({method})
+                </h5>
+                <div className="table-responsive">
+                  <table className="table table-bordered text-center table-sm">
+                    <thead>
+                      <tr>
+                        <th>Origen \ Destino</th>
+                        {solution.initial_solution[0].map((_, j) => (
+                          <th key={j}>
+                            {j < numDemands ? `D${j + 1}` : "Ficticio"}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {solution.initial_solution.map((row, i) => (
+                        <tr key={i}>
+                          <td className="fw-bold bg-light">
+                            {i < numSuppliers ? `O${i + 1}` : "Ficticio"}
+                          </td>
+                          {row.map((val, j) => (
+                            <td
+                              key={j}
+                              className={
+                                val > 0 ? "fw-bold text-primary" : "text-muted"
+                              }
+                            >
+                              {val}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {(solution.sensitivity_analysis ||
               solution.intelligent_analysis) && (
