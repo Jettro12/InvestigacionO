@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from schemas.optimization_schemas import LinearProgrammingRequest, OptimizationResponse
-from services.optimization_service import solve_optimization
+from app.schemas.optimization_schemas import LinearProgrammingRequest, OptimizationResponse
+from app.services.optimization_service import solve_optimization
 
 router = APIRouter()
 
