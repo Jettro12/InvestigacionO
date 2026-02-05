@@ -3,82 +3,42 @@ import io
 import base64
 import heapq
 import matplotlib
-import networkx as nx
 
-# Configurar Matplotlib para entornos sin interfaz gráfica
 matplotlib.use('Agg')
 
-# ==========================================
-# 1. MOTOR DE RENDERIZADO (SOLO DIBUJO)
-# ==========================================
-def generate_graph_image(graph_data, paths=None, title="Grafo", edge_labels=None, edge_color='gray', highlight_color='red'):
-    """
-    Usa NetworkX solo para posicionar nodos y dibujar.
-    La lógica de qué nodos y qué pesos mostrar viene del cálculo manual.
-    """
-    try:
-        plt.figure(figsize=(7, 5))
-        G = nx.DiGraph()
-        
-        for edge in graph_data:
-            u, v = edge[0], edge[1]
-            w = edge[2] if len(edge) > 2 else 0
-            G.add_edge(u, v, weight=w)
-
-        # Posicionamiento consistente de los nodos
-        pos = nx.spring_layout(G, seed=42) 
-        
-        if edge_labels is None:
-            edge_labels = {(u, v): f"{d['weight']}" for u, v, d in G.edges(data=True)}
-
-        # Dibujar base del grafo
-        nx.draw(G, pos, with_labels=True, node_color='lightblue', 
-                edge_color=edge_color, node_size=2000, font_size=10, 
-                arrowsize=20, width=1.5)
-        
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=9)
-
-        # Resaltar camino (para Dijkstra o flujo)
-        if paths and len(paths) > 1:
-            edges_path = [(paths[i], paths[i + 1]) for i in range(len(paths) - 1)]
-            nx.draw_networkx_edges(G, pos, edgelist=edges_path, edge_color=highlight_color, width=3)
-
-        plt.title(title, fontweight='bold')
-        plt.axis('off')
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches='tight')
-        buf.seek(0)
-        image_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-        plt.close()
-        return image_base64
-    except Exception as e:
-        print(f"Error en renderizado: {e}")
-        return ""
-
-# ==========================================
-# 2. LÓGICA DESDE CERO (SIN LIBRERÍAS DE GRAFOS)
-# ==========================================
 
 def dijkstra_algorithm(graph, start_node):
+    """
+    Ruta más corta usando Dijkstra DESDE CERO sin networkx.
+    graph: lista de tuplas (origen, destino, peso, capacidad)
+    """
+    # Construir grafo como diccionario
     nodes = set()
     adj_list = {}
     for u, v, weight, capacity in graph:
-        nodes.add(u); nodes.add(v)
-        if u not in adj_list: adj_list[u] = []
+        nodes.add(u)
+        nodes.add(v)
+        if u not in adj_list:
+            adj_list[u] = []
         adj_list[u].append((v, weight))
     
     for node in nodes:
-        if node not in adj_list: adj_list[node] = []
-
+        if node not in adj_list:
+            adj_list[node] = []
+    
+    # Dijkstra
     distances = {node: float('inf') for node in nodes}
     distances[start_node] = 0
     previous = {node: None for node in nodes}
-    pq = [(0, start_node)]
+    visited = set()
+    pq = [(0, start_node)]  # (distancia, nodo)
     
     while pq:
         current_dist, current_node = heapq.heappop(pq)
-        if current_dist > distances[current_node]: continue
+        
+        if current_node in visited:
+            continue
+        visited.add(current_node)
         
         for neighbor, weight in adj_list[current_node]:
             distance = current_dist + weight
@@ -87,222 +47,395 @@ def dijkstra_algorithm(graph, start_node):
                 previous[neighbor] = current_node
                 heapq.heappush(pq, (distance, neighbor))
     
+    # Encontrar nodo destino con mayor distancia
     end_node = max(distances.keys(), key=lambda x: distances[x] if distances[x] != float('inf') else -1)
     
+    # Reconstruir camino
     path = []
-    curr = end_node
-    while curr is not None:
-        path.append(curr)
-        curr = previous[curr]
+    node = end_node
+    while node is not None:
+        path.append(node)
+        node = previous[node]
     path.reverse()
     
-    img = generate_graph_image(graph, path, "Ruta Más Corta (Dijkstra)")
+    total_weight = distances[end_node] if distances[end_node] != float('inf') else float('inf')
+    
+    image = generate_graph_image(graph, path, "Ruta Más Corta (Dijkstra)")
     
     return {
-        "total_weight": float(distances[end_node]),
+        "total_weight": float(total_weight),
         "node_order": path,
-        "graph_image": img
+        "start_node": start_node,
+        "end_node": end_node,
+        "graph_image": image
     }
 
+
 class UnionFind:
+    """Estructura de datos Union-Find para Kruskal"""
     def __init__(self, n):
         self.parent = list(range(n))
+        self.rank = [0] * n
+    
     def find(self, x):
-        if self.parent[x] != x: self.parent[x] = self.find(self.parent[x])
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
+    
     def union(self, x, y):
-        rootX, rootY = self.find(x), self.find(y)
-        if rootX != rootY:
-            self.parent[rootX] = rootY
-            return True
-        return False
+        px, py = self.find(x), self.find(y)
+        if px == py:
+            return False
+        if self.rank[px] < self.rank[py]:
+            px, py = py, px
+        self.parent[py] = px
+        if self.rank[px] == self.rank[py]:
+            self.rank[px] += 1
+        return True
+
 
 def minimum_spanning_tree(graph):
-    nodes = sorted(list(set([edge[0] for edge in graph] + [edge[1] for edge in graph])))
-    node_to_idx = {node: i for i, node in enumerate(nodes)}
+    """
+    Árbol de Expansión Mínima usando Kruskal DESDE CERO sin networkx.
+    """
+    # Mapear nodos a índices
+    nodes = set()
+    edges = []
+    for u, v, weight, capacity in graph:
+        nodes.add(u)
+        nodes.add(v)
+        edges.append((weight, u, v))
     
-    edges = sorted([(edge[2], edge[0], edge[1]) for edge in graph])
-    uf = UnionFind(len(nodes))
+    nodes_list = sorted(list(nodes))
+    node_to_idx = {node: i for i, node in enumerate(nodes_list)}
+    
+    # Ordenar aristas por peso
+    edges.sort()
+    
+    # Kruskal
+    uf = UnionFind(len(nodes_list))
     mst_edges = []
     total_weight = 0
     
     for weight, u, v in edges:
-        if uf.union(node_to_idx[u], node_to_idx[v]):
+        u_idx = node_to_idx[u]
+        v_idx = node_to_idx[v]
+        
+        if uf.union(u_idx, v_idx):
             mst_edges.append((u, v, weight))
             total_weight += weight
-            
-    img = generate_graph_image(mst_edges, title="Árbol de Expansión Mínima (Kruskal)", edge_color='green')
+    
+    image = generate_graph_image(mst_edges, title="Árbol de Expansión Mínima (Kruskal)")
     
     return {
         "edges": mst_edges,
         "total_weight": float(total_weight),
-        "graph_image": img
+        "graph_image": image
     }
 
-def ford_fulkerson_algorithm(graph, source=None, sink=None):
-    adj = {}
-    caps = {}
-    original_graph = []
-    all_nodes = set()
 
-    # 1. Mapeo de la red y detección automática de Source/Sink
-    for u, v, w, cap in graph:
-        all_nodes.update([u, v])
-        adj.setdefault(u, []).append(v)
-        adj.setdefault(v, []).append(u)
-        # Manejamos el caso de aristas duplicadas sumando capacidades
-        caps[(u, v)] = caps.get((u, v), 0) + cap
-        caps.setdefault((v, u), 0) 
-        original_graph.append((u, v, w, cap))
-
-    # 2. Lógica de detección automática si no se pasan por parámetro
-    if source is None or sink is None:
-        # Fuente: Nodo que solo tiene salidas (o la primera letra del alfabeto)
-        # Sumidero: Nodo que solo tiene entradas (o la última letra del alfabeto)
-        sorted_nodes = sorted(list(all_nodes))
-        source = sorted_nodes[0]
-        sink = sorted_nodes[-1]
-
-    def bfs():
-        parent = {source: None}
+def ford_fulkerson_algorithm(graph, source, sink):
+    """
+    Flujo Máximo usando Ford-Fulkerson DESDE CERO sin networkx.
+    """
+    # Construir capacidades
+    nodes = set()
+    capacity = {}
+    adj_list = {}
+    
+    for u, v, weight, cap in graph:
+        nodes.add(u)
+        nodes.add(v)
+        capacity[(u, v)] = cap
+        if (v, u) not in capacity:
+            capacity[(v, u)] = 0
+        
+        if u not in adj_list:
+            adj_list[u] = []
+        if v not in adj_list:
+            adj_list[v] = []
+        adj_list[u].append(v)
+        adj_list[v].append(u)
+    
+    for node in nodes:
+        if node not in adj_list:
+            adj_list[node] = []
+    
+    def bfs_find_path():
+        """BFS para encontrar camino aumentante"""
+        visited = {source}
         queue = [source]
+        parent = {}
+        
         while queue:
             u = queue.pop(0)
-            for v in adj.get(u, []):
-                # IMPORTANTE: Verificamos capacidad residual real
-                if v not in parent and caps.get((u, v), 0) > 0:
+            for v in adj_list[u]:
+                cap = capacity.get((u, v), 0)
+                if v not in visited and cap > 0:
+                    visited.add(v)
                     parent[v] = u
                     queue.append(v)
-                    if v == sink: return parent
+                    if v == sink:
+                        return parent
         return None
-
+    
     max_flow = 0
-    # 3. Bucle principal de Ford-Fulkerson (Edmonds-Karp)
-    while True:
-        parent = bfs()
-        if not parent: break
+    iterations = []
+    parent_map = bfs_find_path()
+    
+    while parent_map is not None:
+        # Encontrar capacidad mínima en el camino
+        path = []
+        v = sink
+        min_cap = float('inf')
         
-        # Hallar la capacidad residual mínima en el camino encontrado
-        path_flow = float('inf')
-        s = sink
-        while s != source:
-            path_flow = min(path_flow, caps[(parent[s], s)])
-            s = parent[s]
+        while v != source:
+            u = parent_map[v]
+            min_cap = min(min_cap, capacity.get((u, v), 0))
+            path.append(u)
+            v = u
+        path.reverse()
+        path.append(sink)
+        
+        # Actualizar capacidades
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            capacity[(u, v)] -= min_cap
+            capacity[(v, u)] = capacity.get((v, u), 0) + min_cap
+        
+        max_flow += min_cap
+        iterations.append({
+            "path": " → ".join(map(str, path)),
+            "capacity": min_cap
+        })
+        
+        parent_map = bfs_find_path()
+    
+    image = generate_graph_image(graph, title="Flujo Máximo (Ford-Fulkerson)")
+    
+    return {
+        "max_flow": float(max_flow),
+        "iterations": iterations,
+        "start_node": source,
+        "end_node": sink,
+        "graph_image": image
+    }
+
+
+def min_cost_flow_algorithm(graph, source, sink):
+    """
+    Flujo de Costo Mínimo usando algoritmo de caminos sucesivos DESDE CERO.
+    """
+    # Construir grafo
+    nodes = set()
+    edges_dict = {}
+    capacity = {}
+    cost = {}
+    adj_list = {}
+    
+    for u, v, weight, cap in graph:
+        nodes.add(u)
+        nodes.add(v)
+        capacity[(u, v)] = cap
+        cost[(u, v)] = weight
+        
+        if (v, u) not in capacity:
+            capacity[(v, u)] = 0
+            cost[(v, u)] = -weight
+        
+        if u not in adj_list:
+            adj_list[u] = []
+        if v not in adj_list:
+            adj_list[v] = []
+        if v not in adj_list[u]:
+            adj_list[u].append(v)
+        if u not in adj_list[v]:
+            adj_list[v].append(u)
+    
+    for node in nodes:
+        if node not in adj_list:
+            adj_list[node] = []
+    
+    def dijkstra_shortest_path():
+        """Dijkstra para encontrar camino de costo mínimo"""
+        dist = {node: float('inf') for node in nodes}
+        dist[source] = 0
+        parent = {}
+        visited = set()
+        pq = [(0, source)]
+        
+        while pq:
+            d, u = heapq.heappop(pq)
+            if u in visited:
+                continue
+            visited.add(u)
             
-        max_flow += path_flow
-        # Actualizar capacidades residuales
+            for v in adj_list[u]:
+                if capacity.get((u, v), 0) > 0:
+                    new_dist = d + cost.get((u, v), 0)
+                    if new_dist < dist[v]:
+                        dist[v] = new_dist
+                        parent[v] = u
+                        heapq.heappush(pq, (new_dist, v))
+        
+        if dist[sink] == float('inf'):
+            return None, float('inf')
+        
+        path = []
         v = sink
         while v != source:
             u = parent[v]
-            caps[(u, v)] -= path_flow
-            caps[(v, u)] += path_flow
-            v = parent[v]
-
-    # Generar etiquetas para el gráfico: "Enviado / Capacidad"
-    flow_labels = {}
-    for u, v, w, cap_orig in original_graph:
-        # El flujo enviado es la capacidad inicial menos lo que quedó libre
-        enviado = cap_orig - caps.get((u, v), 0)
-        # Aseguramos que no muestre valores negativos por aristas inversas
-        enviado = max(0, enviado)
-        flow_labels[(u, v)] = f"{int(enviado)} / {int(cap_orig)}"
-
-    img = generate_graph_image(original_graph, title=f"Max Flow: {max_flow} ({source} a {sink})", edge_labels=flow_labels)
-
+            path.append(u)
+            v = u
+        path.reverse()
+        path.append(sink)
+        
+        return path, dist[sink]
+    
+    total_cost = 0
+    total_flow = 0
+    iterations = []
+    
+    while True:
+        path, path_cost = dijkstra_shortest_path()
+        if path is None:
+            break
+        
+        # Encontrar capacidad mínima
+        min_cap = float('inf')
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            min_cap = min(min_cap, capacity.get((u, v), 0))
+        
+        if min_cap == 0:
+            break
+        
+        # Actualizar flujo
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            capacity[(u, v)] -= min_cap
+            capacity[(v, u)] = capacity.get((v, u), 0) + min_cap
+        
+        total_flow += min_cap
+        total_cost += min_cap * path_cost
+        
+        iterations.append({
+            "path": " → ".join(map(str, path)),
+            "flow": min_cap,
+            "cost": min_cap * path_cost
+        })
+    
+    image = generate_graph_image(graph, title="Flujo Costo Mínimo")
+    
     return {
-        "max_flow": float(max_flow),
-        "graph_image": img,
-        "source": source,
-        "sink": sink
+        "total_flow": float(total_flow),
+        "min_cost": float(total_cost),
+        "iterations": iterations,
+        "start_node": source,
+        "end_node": sink,
+        "graph_image": image
     }
 
-    # Generar etiquetas dinámicas: "Flujo / Capacidad"
-    flow_labels = {}
-    for u, v, w, cap_orig in original_graph:
-        enviado = cap_orig - caps[(u, v)]
-        flow_labels[(u, v)] = f"{int(enviado)} / {int(cap_orig)}"
 
-    img = generate_graph_image(original_graph, title="Flujo Máximo (Enviado / Capacidad)", edge_labels=flow_labels)
+def generate_graph_image(graph, paths=None, title="Grafo"):
+    """Genera una imagen del grafo con Matplotlib"""
+    try:
+        import networkx as nx
+        
+        G = nx.DiGraph()
+        for edge in graph:
+            if len(edge) == 4:
+                u, v, weight, capacity = edge
+                G.add_edge(u, v, weight=weight)
+            elif len(edge) == 3:
+                u, v, weight = edge
+                G.add_edge(u, v, weight=weight)
+            else:
+                raise ValueError("Formato de arista no soportado")
+
+        pos = nx.spring_layout(G)
+        labels = {(u, v): f"{d['weight']}" for u, v, d in G.edges(data=True)}
+
+        plt.figure(figsize=(6, 4))
+        nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color='gray', node_size=2000, font_size=10)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
+
+        if paths:
+            edges = [(paths[i], paths[i + 1]) for i in range(len(paths) - 1)]
+            nx.draw_networkx_edges(G, pos, edgelist=edges, edge_color='red', width=2)
+
+        plt.title(title)
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        image_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        plt.close()
+        return image_base64
+    except:
+        # Si falla NetworkX, retornar imagen vacía
+        return ""
+
+    # Obtener nodo destino con la mayor distancia encontrada
+    end_node = max(path_lengths, key=path_lengths.get)
+    total_weight = path_lengths[end_node]
+    node_order = paths[end_node] if end_node in paths else []
+
+    image = generate_graph_image(graph, node_order, "Ruta Más Corta")
 
     return {
-        "max_flow": float(max_flow),
-        "graph_image": img
+        "total_weight": total_weight,
+        "node_order": node_order,
+        "start_node": start_node,
+        "end_node": end_node,
+        "graph_image": image
     }
+
 def sensitivity_analysis_shortest_path(graph, start_node, end_node):
     """
-    Análisis de sensibilidad: calcula el impacto de eliminar cada arista 
-    en la ruta más corta original.
+    Análisis de sensibilidad: calcula impacto de eliminar cada arista.
+    Implementado sin librerías externas.
     """
-    # 1. Calcular la distancia base
-    base_result = dijkstra_algorithm(graph, start_node)
-    base_length = base_result["total_weight"]
+    # Calcular distancia base
+    result_base = dijkstra_algorithm(graph, start_node)
+    base_length = result_base["total_weight"]
     
-    # Si de entrada no hay ruta, no hay mucho que analizar
-    if base_length == float('inf'):
-        return {"error": "No existe una ruta inicial entre los nodos seleccionados"}
-
-    sensitivities = {}
-    
-    # 2. Probar eliminando una arista a la vez
-    for i, edge in enumerate(graph):
-        u_rem, v_rem = edge[0], edge[1]
+    results = {}
+    for idx, (u, v, weight, capacity) in enumerate(graph):
+        # Crear grafo sin esta arista
+        graph_temp = [edge for i, edge in enumerate(graph) if i != idx]
         
-        # Crear un grafo temporal sin la arista actual
-        temp_graph = [e for j, e in enumerate(graph) if i != j]
+        if not graph_temp:
+            results[f"({u},{v})"] = "Sin ruta" if base_length != float('inf') else "Sin cambio"
+            continue
         
         try:
-            temp_result = dijkstra_algorithm(temp_graph, start_node)
-            new_length = temp_result["total_weight"]
+            result_temp = dijkstra_algorithm(graph_temp, start_node)
+            new_length = result_temp["total_weight"]
             
             if new_length == float('inf'):
-                impact = "Ruta se vuelve imposible"
+                impact = "Sin ruta"
             else:
                 impact = new_length - base_length
-                
-            sensitivities[f"{u_rem} -> {v_rem}"] = impact
-        except Exception as e:
-            sensitivities[f"{u_rem} -> {v_rem}"] = f"Error: {str(e)}"
-            
-    return sensitivities
-# ==========================================
-# 3. PUNTO DE ENTRADA PRINCIPAL
-# ==========================================
+            results[f"({u},{v})"] = impact
+        except:
+            results[f"({u},{v})"] = "Error"
+    
+    return results
+
+
 def solve_all_problems(graph):
+    """Resuelve todos los problemas de redes y devuelve datos completos"""
     if not graph:
         return {"error": "Grafo vacío"}
     
-    # 1. IDENTIFICACIÓN ESTÁTICA DE NODOS (Agnóstica al orden)
-    all_nodes = set()
-    for u, v, w, cap in graph:
-        all_nodes.update([u, v])
-    
-    # Ordenamos alfabéticamente para que el 'mínimo' siempre sea el inicio 
-    # y el 'máximo' el final, sin importar el orden del array.
-    sorted_nodes = sorted(list(all_nodes))
-    source = sorted_nodes[0]
-    sink = sorted_nodes[-1]
+    source = graph[0][0]
+    sink = graph[-1][1]
 
-    # 2. EJECUCIÓN DE ALGORITMOS PASANDO LOS NODOS EXPLÍCITOS
-    # Pasamos 'source' a Dijkstra para que siempre empiece en el mismo lugar
-    res_dijkstra = dijkstra_algorithm(graph, source)
-    
-    # MST no depende de source/sink, así que este suele estar bien
-    res_mst = minimum_spanning_tree(graph)
-    
-    # Pasamos source y sink explícitos a Ford-Fulkerson
-    res_max_flow = ford_fulkerson_algorithm(graph, source, sink)
-    
-    # Ejecutamos análisis de sensibilidad con los mismos nodos consistentes
-    sensibilidad = sensitivity_analysis_shortest_path(graph, source, sink)
-
-    # 3. CONSTRUCCIÓN DE RESULTADOS
-    results = {
-        "shortest_path": res_dijkstra,
-        "mst": res_mst,
-        "max_flow": res_max_flow,
-        "sensitivity": sensibilidad,
-        "graph_image_base64": res_dijkstra["graph_image"]
+    return {
+        "shortest_path": dijkstra_algorithm(graph, source),
+        "mst": minimum_spanning_tree(graph),
+        "max_flow": ford_fulkerson_algorithm(graph, source, sink),
+        "min_cost_flow": min_cost_flow_algorithm(graph, source, sink),
     }
-    
-    print(f"✅ Cálculos consistentes completados: {source} -> {sink}")
-    return results
+

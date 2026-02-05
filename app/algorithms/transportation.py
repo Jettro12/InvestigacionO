@@ -119,281 +119,114 @@ def vogel_approximation_method(supply, demand, costs):
 
 def calcular_costo_total(asignacion, costos):
     """Calcula el costo total de una asignación dada una matriz de costos."""
-    total = 0.0
-    rows = len(asignacion)
-    cols = len(asignacion[0]) if rows > 0 else 0
-    for i in range(rows):
-        for j in range(cols):
-            total += float(asignacion[i][j]) * float(costos[i][j])
-    return total
+    import numpy as np
+    asignacion = np.array(asignacion)
+    costos = np.array(costos)
+    return float(np.sum(asignacion * costos))
 
-# 2. MODI mejorado - Implementación desde cero sin librerías de optimización
+# 2. MODI mejorado
 
 def modi_method(asignacion_inicial, costos, max_iter=100):
     """
-    Método MODI (Modified Distribution Method) para optimizar un problema de transporte.
-    Implementado completamente desde cero sin usar librerías de optimización.
-    
-    Parámetros:
-    - asignacion_inicial: Matriz de asignación inicial (de Northwest, Vogel, o Costo Mínimo)
-    - costos: Matriz de costos unitarios
-    - max_iter: Número máximo de iteraciones
-    
-    Retorna:
-    - (asignacion_optima, costo_total)
+    Método MODI robusto: optimiza la asignación inicial y retorna (asignación_final, costo_total).
+    Solo actualiza si la solución mejora o es igual. Elimina asignaciones degeneradas (<1e-7).
     """
-    # Convertir a listas para trabajar sin numpy en la lógica
-    if hasattr(asignacion_inicial, 'tolist'):
-        asignacion = [row[:] for row in asignacion_inicial.tolist()]
-    else:
-        asignacion = [row[:] for row in asignacion_inicial]
-    
-    if hasattr(costos, 'tolist'):
-        costos_lista = [row[:] for row in costos.tolist()]
-    else:
-        costos_lista = [row[:] for row in costos]
-    
-    m = len(asignacion)  # número de orígenes
-    n = len(asignacion[0]) if m > 0 else 0  # número de destinos
-    
-    print(f"📊 MODI: Iniciando optimización. Matriz {m}x{n}")
-    
-    for iteracion in range(max_iter):
-        print(f"\n🔄 Iteración MODI #{iteracion + 1}")
-        
-        # Paso 1: Obtener las celdas básicas (con asignación > 0)
-        celdas_basicas = []
-        for i in range(m):
-            for j in range(n):
-                if asignacion[i][j] > 1e-9:
-                    celdas_basicas.append((i, j))
-        
-        print(f"   Celdas básicas: {celdas_basicas}")
-        
-        # Verificar degeneración: necesitamos m + n - 1 celdas básicas
-        num_basicas_requeridas = m + n - 1
-        if len(celdas_basicas) < num_basicas_requeridas:
-            print(f"   ⚠️ Solución degenerada: {len(celdas_basicas)} < {num_basicas_requeridas}")
-            # Agregar épsilon a celdas no básicas para resolver degeneración
-            epsilon = 1e-9
-            for i in range(m):
-                for j in range(n):
-                    if len(celdas_basicas) >= num_basicas_requeridas:
-                        break
-                    if asignacion[i][j] <= 1e-9:
-                        asignacion[i][j] = epsilon
-                        celdas_basicas.append((i, j))
-                if len(celdas_basicas) >= num_basicas_requeridas:
-                    break
-        
-        # Paso 2: Calcular los multiplicadores U y V
-        U = [None] * m
-        V = [None] * n
-        U[0] = 0  # Fijar U[0] = 0 arbitrariamente
-        
-        # Resolver el sistema U[i] + V[j] = C[i][j] para celdas básicas
-        cambio = True
-        max_intentos = m * n + 10
-        intentos = 0
-        while cambio and intentos < max_intentos:
-            cambio = False
-            intentos += 1
-            for (i, j) in celdas_basicas:
-                costo = costos_lista[i][j]
-                if U[i] is not None and V[j] is None:
-                    V[j] = costo - U[i]
-                    cambio = True
-                elif V[j] is not None and U[i] is None:
-                    U[i] = costo - V[j]
-                    cambio = True
-        
-        # Rellenar valores None con 0 si quedaron
-        U = [0 if u is None else u for u in U]
-        V = [0 if v is None else v for v in V]
-        
-        print(f"   U = {U}")
-        print(f"   V = {V}")
-        
-        # Paso 3: Calcular costos reducidos para celdas no básicas
-        # Costo reducido = C[i][j] - U[i] - V[j]
-        celda_entrante = None
-        min_costo_reducido = 0
-        
-        for i in range(m):
-            for j in range(n):
-                if asignacion[i][j] <= 1e-9:  # Celda no básica
-                    costo_reducido = costos_lista[i][j] - U[i] - V[j]
-                    if costo_reducido < min_costo_reducido - 1e-9:
-                        min_costo_reducido = costo_reducido
-                        celda_entrante = (i, j)
-        
-        # Si no hay costos reducidos negativos, la solución es óptima
-        if celda_entrante is None:
-            print(f"   ✅ Solución óptima encontrada en iteración {iteracion + 1}")
+    import numpy as np
+    asignacion = np.array(asignacion_inicial, dtype=float)
+    costos = np.array(costos, dtype=float)
+    m, n = asignacion.shape
+    iteraciones = 0
+
+    def limpiar_degeneradas(asig):
+        asig[asig < 1e-7] = 0
+        return asig
+
+    # Costo inicial
+    asignacion = limpiar_degeneradas(asignacion)
+    costo_inicial = calcular_costo_total(asignacion, costos)
+    mejor_asignacion = asignacion.copy()
+    mejor_costo = costo_inicial
+
+    while iteraciones < max_iter:
+        iteraciones += 1
+        U, V = calculate_potentials(asignacion, costos)
+        reduced_costs = calculate_reduced_costs(U, V, costos)
+        entering_cell = find_entering_cell(reduced_costs, asignacion)
+        if entering_cell is None:
             break
-        
-        print(f"   Celda entrante: {celda_entrante} con costo reducido {min_costo_reducido:.4f}")
-        
-        # Paso 4: Encontrar el ciclo cerrado (stepping stone path)
-        ciclo = encontrar_ciclo_modi(asignacion, celda_entrante, m, n)
-        
+        ciclo = find_loop(asignacion, entering_cell)
         if ciclo is None or len(ciclo) < 4:
-            print(f"   ❌ No se encontró ciclo válido para la celda {celda_entrante}")
+            # No se encontró ciclo válido, termina
             break
-        
-        print(f"   Ciclo encontrado: {ciclo}")
-        
-        # Paso 5: Determinar theta (cantidad a transferir)
-        # theta = mínimo de las asignaciones en posiciones impares del ciclo (las que se restan)
-        theta = float('inf')
-        for idx in range(1, len(ciclo), 2):  # Posiciones impares (1, 3, 5, ...)
-            i, j = ciclo[idx]
-            if asignacion[i][j] < theta:
-                theta = asignacion[i][j]
-        
-        if theta <= 0 or theta == float('inf'):
-            print(f"   ❌ Theta inválido: {theta}")
+        nueva_asignacion = update_allocation(asignacion.copy(), ciclo)
+        nueva_asignacion = limpiar_degeneradas(nueva_asignacion)
+        nuevo_costo = calcular_costo_total(nueva_asignacion, costos)
+        # Solo actualiza si mejora o iguala el costo
+        if nuevo_costo <= mejor_costo:
+            asignacion = nueva_asignacion
+            mejor_asignacion = nueva_asignacion.copy()
+            mejor_costo = nuevo_costo
+        else:
             break
-        
-        print(f"   Theta (cantidad a transferir): {theta}")
-        
-        # Paso 6: Actualizar la asignación
-        for idx, (i, j) in enumerate(ciclo):
-            if idx % 2 == 0:  # Posiciones pares: sumar
-                asignacion[i][j] += theta
-            else:  # Posiciones impares: restar
-                asignacion[i][j] -= theta
-                if asignacion[i][j] < 1e-9:
-                    asignacion[i][j] = 0
-        
-        costo_actual = calcular_costo_total(asignacion, costos_lista)
-        print(f"   Costo después de actualización: {costo_actual}")
-    
-    # Limpiar valores muy pequeños
-    for i in range(m):
-        for j in range(n):
-            if asignacion[i][j] < 1e-7:
-                asignacion[i][j] = 0
-    
-    costo_final = calcular_costo_total(asignacion, costos_lista)
-    print(f"\n🎯 MODI completado. Costo final: {costo_final}")
-    
-    return asignacion, costo_final
+    mejor_asignacion = limpiar_degeneradas(mejor_asignacion)
+    return mejor_asignacion.tolist(), mejor_costo
 
-
-def encontrar_ciclo_modi(asignacion, celda_entrante, m, n):
-    """
-    Encuentra un ciclo cerrado para el método MODI usando BFS.
-    El ciclo alterna entre movimientos horizontales y verticales,
-    pasando solo por celdas básicas (excepto la celda entrante).
-    
-    Retorna una lista de tuplas (i, j) que forman el ciclo, o None si no existe.
-    """
-    start_i, start_j = celda_entrante
-    
-    # Obtener celdas básicas
-    celdas_basicas = set()
-    for i in range(m):
-        for j in range(n):
-            if asignacion[i][j] > 1e-9:
-                celdas_basicas.add((i, j))
-    
-    # Agregar la celda entrante temporalmente
-    celdas_basicas.add(celda_entrante)
-    
-    # BFS para encontrar el ciclo
-    # Estado: (fila, columna, es_movimiento_horizontal, camino)
-    from collections import deque
-    
-    # Intentar empezando con movimiento horizontal
-    for direccion_inicial in [True, False]:  # True = horizontal, False = vertical
-        cola = deque()
-        cola.append((start_i, start_j, direccion_inicial, [(start_i, start_j)]))
-        
-        while cola:
-            ci, cj, es_horizontal, camino = cola.popleft()
-            
-            if es_horizontal:
-                # Buscar en la misma fila
-                for nj in range(n):
-                    if nj != cj and (ci, nj) in celdas_basicas:
-                        if (ci, nj) == celda_entrante and len(camino) >= 3:
-                            # Encontramos el ciclo!
-                            return camino
-                        if (ci, nj) not in camino:
-                            nuevo_camino = camino + [(ci, nj)]
-                            if len(nuevo_camino) <= m + n:  # Límite de longitud
-                                cola.append((ci, nj, False, nuevo_camino))
-            else:
-                # Buscar en la misma columna
-                for ni in range(m):
-                    if ni != ci and (ni, cj) in celdas_basicas:
-                        if (ni, cj) == celda_entrante and len(camino) >= 3:
-                            # Encontramos el ciclo!
-                            return camino
-                        if (ni, cj) not in camino:
-                            nuevo_camino = camino + [(ni, cj)]
-                            if len(nuevo_camino) <= m + n:  # Límite de longitud
-                                cola.append((ni, cj, True, nuevo_camino))
-    
-    return None
-
-
-# 3. update_allocation (mantenido por compatibilidad, pero ya no se usa directamente)
+# 3. update_allocation robusto
 
 def update_allocation(asignacion, ciclo):
     """Actualiza la asignación según el ciclo MODI, robusto a errores y negativos."""
+    import numpy as np
     if ciclo is None or len(ciclo) < 4:
         return asignacion
-    
-    # Encontrar theta
-    theta = float('inf')
-    for idx in range(1, len(ciclo), 2):
-        i, j = ciclo[idx]
-        val = asignacion[i][j] if hasattr(asignacion, '__getitem__') else asignacion[i, j]
-        if val < theta:
-            theta = val
-    
-    if theta <= 0:
+    valores = [asignacion[i, j] for idx, (i, j) in enumerate(ciclo[1::2]) if asignacion[i, j] > 0]
+    if not valores:
         return asignacion
-    
-    # Actualizar
+    theta = min(valores)
+    if theta <= 0 or np.isnan(theta):
+        return asignacion
     for idx, (i, j) in enumerate(ciclo):
         if idx % 2 == 0:
-            if hasattr(asignacion, '__getitem__') and hasattr(asignacion[i], '__setitem__'):
-                asignacion[i][j] += theta
-            else:
-                asignacion[i, j] += theta
+            asignacion[i, j] += theta
         else:
-            if hasattr(asignacion, '__getitem__') and hasattr(asignacion[i], '__setitem__'):
-                asignacion[i][j] -= theta
-                if asignacion[i][j] < 0:
-                    asignacion[i][j] = 0
-            else:
-                asignacion[i, j] -= theta
-                if asignacion[i, j] < 0:
-                    asignacion[i, j] = 0
-    
+            asignacion[i, j] -= theta
+            if asignacion[i, j] < 0:
+                asignacion[i, j] = 0
     return asignacion
 
-
-# 4. find_loop (mantenido por compatibilidad)
+# 4. find_loop robusto
 
 def find_loop(asignacion, celda_entrada):
-    """Busca un ciclo alternante válido para MODI. Usa la nueva implementación."""
-    if hasattr(asignacion, 'shape'):
-        m, n = asignacion.shape
-    else:
-        m = len(asignacion)
-        n = len(asignacion[0]) if m > 0 else 0
-    
-    # Convertir a lista si es necesario
-    if hasattr(asignacion, 'tolist'):
-        asig_lista = asignacion.tolist()
-    else:
-        asig_lista = asignacion
-    
-    return encontrar_ciclo_modi(asig_lista, celda_entrada, m, n)
+    """Busca un ciclo alternante válido para MODI. Retorna None si no existe."""
+    import numpy as np
+    rows, cols = asignacion.shape
+    start = celda_entrada
+    def backtrack(pos, path, visited, is_row):
+        i, j = pos
+        if len(path) > 3 and pos == start:
+            return path
+        if is_row:
+            for nj in range(cols):
+                if nj != j and (asignacion[i, nj] > 0 or (i, nj) == start):
+                    next_pos = (i, nj)
+                    if next_pos not in visited or (next_pos == start and len(path) > 3):
+                        res = backtrack(next_pos, path + [next_pos], visited | {next_pos}, not is_row)
+                        if res:
+                            return res
+        else:
+            for ni in range(rows):
+                if ni != i and (asignacion[ni, j] > 0 or (ni, j) == start):
+                    next_pos = (ni, j)
+                    if next_pos not in visited or (next_pos == start and len(path) > 3):
+                        res = backtrack(next_pos, path + [next_pos], visited | {next_pos}, not is_row)
+                        if res:
+                            return res
+        return None
+    ciclo = backtrack(start, [start], {start}, True)
+    if not ciclo:
+        ciclo = backtrack(start, [start], {start}, False)
+    if not ciclo or len(ciclo) < 4:
+        return None
+    return ciclo
 
 def calculate_potentials(allocation, costs):
     """
