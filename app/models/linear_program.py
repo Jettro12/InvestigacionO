@@ -11,15 +11,21 @@ from app.algorithms.linear_programming import solve_linear_program, solve_graphi
 
 def solve_linear_problem(data):
     """
-    Une el request del frontend con la lógica de los algoritmos de Simplex.
+    Une el request del frontend con la lógica de los algoritmos.
+    Ahora detecta si debe generar un gráfico.
     """
-    # Extraemos los datos del JSON que viene del frontend
+    method = data.get("method", "simplex")
+    
+    # --- 1. DETECCIÓN DE MÉTODO GRÁFICO ---
+    # Si el método es graphical, llamamos a solve_graphical directamente
+    if method == "graphical":
+        return solve_graphical(data)
+
+    # --- 2. LÓGICA PARA MÉTODOS ANALÍTICOS (Simplex, Gran M, etc.) ---
     objective_coeffs = data.get("objective_coeffs")
     constraints = data.get("constraints")
-    method = data.get("method", "simplex")
     obj_type = data.get("objective", "max")
 
-    # Mapeo de nombres por si el frontend envía "m_big" en lugar de "big_m"
     method_map = {
         "m_big": "big_m",
         "simplex": "simplex",
@@ -28,7 +34,7 @@ def solve_linear_problem(data):
     
     selected_method = method_map.get(method, method)
 
-    # Llamamos a la función maestra en algorithms
+    # Llamamos a la función maestra
     result = solve_linear_program(
         objective=objective_coeffs,
         constraints=constraints,
