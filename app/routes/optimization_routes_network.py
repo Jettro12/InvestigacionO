@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Union  # ✅ Permite que los pesos sean int o float
-from services.optimization_service_network import solve_optimization_network
+from app.services.optimization_service_network import solve_optimization_network
 
 router = APIRouter()
 
