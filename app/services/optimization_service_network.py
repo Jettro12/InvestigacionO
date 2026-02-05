@@ -1,69 +1,86 @@
+print(">>> CARGANDO app/services/optimization_service_network.py")
+
 from groq import Groq
 import os
-import json
 from dotenv import load_dotenv
-import numpy as np
 
-load_dotenv()
+# Cargar .env desde la carpeta app
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# Cargar API key desde .env
 API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=API_KEY) if API_KEY else None
+if API_KEY:
+    client = Groq(api_key=API_KEY)
+    print(f"✅ API_KEY configurada para Groq (primeros 20 caracteres): {API_KEY[:20]}...")
+else:
+    print("❌ ERROR: GROQ_API_KEY no está configurada en .env")
+    client = None
 
-from algorithms.network_optimization import (
+from app.algorithms.network_optimization import (
     solve_all_problems, sensitivity_analysis_shortest_path
 )
 
-def gemini_network_sensitivity_analysis(graph, shortest_path_result, max_flow_result):
+def gemini_network_sensitivity_analysis(graph, shortest_path_result):
     if not client:
-        return "⚠️ Error: API de Groq no configurada."
+        return "Error: API de Groq no configurada. Verifica tu GROQ_API_KEY en .env"
+    
+    print(">>> ENTRANDO a groq_network_sensitivity_analysis")
+    import json
+    
+    # Convertir datos a strings JSON
+    graph_str = json.dumps(graph)
+    node_order_str = json.dumps(shortest_path_result.get('node_order', []))
+    
+    prompt = f"""Analiza la sensibilidad de esta red:
+    Grafo: {graph_str}
+    Ruta más corta encontrada: {node_order_str}
+    Peso total: {shortest_path_result.get('total_weight', 'N/A')}
+
+Proporciona un análisis claro en texto plano. Usa estas marcas:
+- [CRÍTICO] para información importante
+- [RECOMENDACIÓN] para mejoras sugeridas
+- [RIESGO] para puntos débiles
+
+Incluye:
+1. Qué aristas son críticas para la ruta
+2. Impacto si se elimina una arista crítica
+3. Evaluación de robustez de la red
+4. Mejoras para mejorar la red
+5. Análisis de rutas alternativas
+6. Recomendaciones concretas
+
+Presenta en texto limpio y comprensible."""
     
     try:
-        # CORRECCIÓN: Convertir a lista estándar si es un array de numpy
-        clean_graph = graph.tolist() if isinstance(graph, np.ndarray) else graph
-        
-        # Preparar datos legibles
-        graph_data = [{"desde": e[0], "hacia": e[1], "costo": e[2], "capacidad": e[3]} for e in clean_graph]
-        
-        prompt = f"""Actúa como un experto en Ingeniería de Redes. Analiza esta red:
-        
-        **DATOS TÉCNICOS:**
-        - Estructura (Aristas): {json.dumps(graph_data)}
-        - Ruta Más Corta: {shortest_path_result.get('node_order', [])}
-        - Peso Total: {shortest_path_result.get('total_weight', 0)}
-        - Flujo Máximo: {max_flow_result.get('max_flow', 0)}
-
-        **INSTRUCCIONES:**
-        1. Identifica Puntos de Falla Únicos [CRÍTICO].
-        2. Analiza Cuellos de Botella basándote en la capacidad [RIESGO].
-        3. Evalúa la Resiliencia y da una [RECOMENDACIÓN].
-        
-        Sé técnico y directo."""
-
         message = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
-            temperature=0.2 
+            model="llama-3.1-8b-instant"
         )
-        return message.choices[0].message.content
+        response = message.choices[0].message.content
+        print(">>> RESPUESTA DE GROQ:", response)
+        return response
     except Exception as e:
-        print(f"❌ Error en IA de Redes: {e}")
-        return f"No se pudo generar el análisis: {str(e)}"
+        response = f"Error al generar análisis con Groq: {str(e)}"
+        print(">>> ERROR DE GROQ:", response)
+        return response
 
 def solve_optimization_network(problem_type, data):
+    print(f">>> solve_optimization_network llamado con problem_type={problem_type}")
     graph = data["graph"]
     
-    # Aseguramos que el algoritmo reciba el formato correcto
+    # Obtener cálculos básicos del archivo algorithms/network_optimization.py
     results = solve_all_problems(graph)
     
-    all_nodes = sorted(list(set([node for edge in graph for node in edge[:2]])))
-    start_node = data.get("start_node", all_nodes[0])
-    end_node = data.get("end_node", all_nodes[-1])
-
-    # Inyectamos el análisis de sensibilidad
-    results["shortest_path"]["sensitivity_analysis_gemini"] = gemini_network_sensitivity_analysis(
-        graph, 
-        results["shortest_path"], 
-        results.get("max_flow", {})
-    )
+    # Definir nodos inicio y fin
+    start_node = graph[0][0]
+    end_node = graph[-1][1]
+    
+    # 1. Análisis de Sensibilidad Numérico (para la tabla)
+    results["sensitivity"] = sensitivity_analysis_shortest_path(graph, start_node, end_node)
+    
+    # 2. Análisis de IA con Groq (para el cuadro de texto)
+    # IMPORTANTE: Guardarlo en la raíz como 'intelligent_analysis'
+    results["intelligent_analysis"] = gemini_network_sensitivity_analysis(graph, results["shortest_path"])
     
     return results

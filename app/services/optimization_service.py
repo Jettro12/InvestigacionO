@@ -1,160 +1,145 @@
+from app.algorithms.linear_programming import solve_linear_program
 import numpy as np
-import os
-import json
 from groq import Groq
+import os
 from dotenv import load_dotenv
 
-# Algoritmos de transporte
-from algorithms.transportation import (
+# Cargar .env desde la carpeta app
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+from app.algorithms.transportation import (
     balance_transportation_problem,
     northwest_corner_method,
     minimum_cost_method,
     vogel_approximation_method,
     modi_method
 )
-# Otros algoritmos
-from models.linear_program import solve_linear_problem as solve_linear_program
-from algorithms.network_optimization import dijkstra_algorithm
+from app.algorithms.network_optimization import dijkstra_algorithm
 
-load_dotenv()
-
-# Configurar Groq AI
+# Configurar Groq AI con API key del .env
 API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=API_KEY) if API_KEY else None
+if API_KEY:
+    client = Groq(api_key=API_KEY)
+else:
+    client = None
 
-def generate_sensitivity_analysis(optimal_solution, total_cost, costs, supply, demand, method):
+def generate_sensitivity_analysis(solution, total_cost):
     """
-    Genera un análisis de sensibilidad técnico basado en dualidad y costos logísticos.
+    Genera un análisis de sensibilidad utilizando Groq AI con texto plano.
     """
-    if not client:
-        return "⚠️ Error: API de Groq no configurada. Verifica la variable GROQ_API_KEY."
+    import json
+    
+    if not API_KEY:
+        return "Error: GROQ_API_KEY no está configurada en .env"
+    
+    # Convertir solución a string JSON para evitar errores
+    solution_str = json.dumps(solution.tolist() if hasattr(solution, 'tolist') else solution)
+    
+    prompt = f"""Analiza en detalle este problema de transporte:
+    - Solución óptima: {solution_str}
+    - Costo total: {total_cost}
 
-    try:
-        # CORRECCIÓN DEFINITIVA: Convertir a listas de Python estándar para evitar error 'tolist'
-        sol_list = optimal_solution.tolist() if isinstance(optimal_solution, np.ndarray) else optimal_solution
-        costs_list = costs.tolist() if isinstance(costs, np.ndarray) else costs
-        
-        # Serializar a JSON para que la IA reciba una estructura clara
-        sol_json = json.dumps(sol_list)
-        costs_json = json.dumps(costs_list)
-    except Exception as e:
-        print(f"⚠️ Error serializando datos para IA: {e}")
-        sol_json = str(optimal_solution)
-        costs_json = str(costs)
+Proporciona un análisis claro en texto plano. Usa estas marcas para resaltar:
+- [CRÍTICO] para información de alta importancia
+- [RECOMENDACIÓN] para sugerencias prácticas
+- [RIESGO] para puntos débiles
 
-    # Prompt de Ingeniería de Operaciones optimizado
-    prompt = f"""Actúa como un experto en Logística y Optimización Matemática (Investigación de Operaciones). 
-Analiza los resultados de este Modelo de Transporte resuelto con el método {method} y optimizado mediante MODI.
+Incluye:
+1. Resumen de cómo se distribuyeron los envíos
+2. Mejoras posibles
+3. Impacto de cambios
+4. Recomendaciones concretas
+5. Ahorro potencial si se implementan mejoras
+6. Riesgos a considerar
 
-**DATOS TÉCNICOS DEL MODELO:**
-- Matriz de Costos Unitarios (C): {costs_json}
-- Capacidades de Oferta (Si): {supply}
-- Requerimientos de Demanda (Dj): {demand}
-- Costo Total Óptimo (Z): ${total_cost}
-
-**MATRIZ DE ASIGNACIÓN ÓPTIMA (Flujos):**
-{sol_json}
-
-**DIRECTRICES PARA EL ANÁLISIS:**
-1. **Flujos y Conectividad:** Identifica las rutas Origen-Destino con mayor volumen. Usa términos 'Orígenes' y 'Destinos'.
-2. **Restricciones Activas:** Indica qué Orígenes agotaron su oferta por completo.
-3. **Interpretación Dual:** Explica el beneficio de aumentar la capacidad en los orígenes más críticos (Precios Sombra).
-4. **Costos de Oportunidad:** Analiza las celdas con flujo cero e indica si hay ineficiencias o soluciones alternativas.
-
-**REQUERIMIENTOS DE FORMATO:**
-Usa etiquetas:
-- [CRÍTICO] para saturación de capacidad o penalizaciones por nodos ficticios.
-- [RECOMENDACIÓN] para expansión de infraestructura o renegociación.
-- [RIESGO] para rutas sensibles a variaciones de precio.
-
-Sé técnico, directo y evita introducciones genéricas."""
+Presenta en texto limpio y comprensible para usuarios de negocios."""
 
     try:
         message = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
-            temperature=0.2 
+            model="llama-3.1-8b-instant"
         )
-        return message.choices[0].message.content
+        response_text = message.choices[0].message.content
+        return response_text
     except Exception as e:
-        return f"Error al generar análisis inteligente: {str(e)}"
+        print(f"Error en análisis de sensibilidad: {str(e)}")
+        return f"Error al generar análisis: {str(e)}"
 
 def calculate_total_cost(solution, costs):
     """
-    Calcula el costo total asegurando compatibilidad con tipos NumPy y Listas.
+    Calcula el costo total de la solución basada en la matriz de costos.
     """
-    sol_array = np.array(solution)
-    costs_array = np.array(costs)
-    return float(np.sum(sol_array * costs_array))
+    total_cost = 0
+    for i in range(len(solution)):
+        for j in range(len(solution[i])):
+            total_cost += solution[i][j] * costs[i][j] 
+    return total_cost
 
 def solve_optimization(problem_type, data):
-    """
-    Punto de entrada único para resolver problemas de optimización.
-    """
-    print(f"🚀 Procesando {problem_type}...")
+    print(f"🚀 Recibida solicitud para {problem_type} con datos:", data)
 
-    if problem_type == "transport":
+    if problem_type == "linear":
+        return solve_linear_program(data["c"], data["A_ub"], data["b_ub"])
+    elif problem_type == "transport":
         try:
-            supply = data.get("supply")
-            demand = data.get("demand")
-            costs_input = np.array(data.get("costs"), dtype=float)
+            # 🔍 Verificar si los datos existen
+            if "supply" not in data or "demand" not in data or "costs" not in data:
+                return {"status": "error", "message": "Faltan datos en la solicitud"}
+
+            supply = data["supply"]
+            demand = data["demand"]
+            costs = np.array(data["costs"], dtype=float)
+
+            # Guardamos el tamaño original
+            original_supply_len = len(supply)
+            original_demand_len = len(demand)
+
+            # 🔍 Verificar si se necesita balancear el problema
+            supply, demand, costs = balance_transportation_problem(supply, demand, costs)
+
+            balance_message = None
+            if len(supply) > original_supply_len:
+                balance_message = "Se agregó un suministro ficticio para balancear el problema."
+            elif len(demand) > original_demand_len:
+                balance_message = "Se agregó una demanda ficticia para balancear el problema."
+
+            # Seleccionar método inicial
             method = data.get("method", "northwest")
 
-            if supply is None or demand is None or costs_input is None:
-                return {"status": "error", "message": "Datos de entrada incompletos."}
-
-            # 1. Balanceo Automático
-            s_bal, d_bal, c_bal = balance_transportation_problem(supply, demand, costs_input)
-
-            # 2. Solución Básica Inicial
             if method == "northwest":
-                initial_solution = northwest_corner_method(s_bal, d_bal)
+                initial_solution = northwest_corner_method(supply, demand)
             elif method == "minimum_cost":
-                initial_solution = minimum_cost_method(s_bal, d_bal, c_bal)
+                initial_solution = minimum_cost_method(supply, demand, costs)
+            elif method == "vogel":
+                initial_solution = vogel_approximation_method(supply, demand, costs)
             else:
-                initial_solution = vogel_approximation_method(s_bal, d_bal, c_bal)
+                return {"status": "error", "message": "Método inválido"}
+            
+             # Optimización con MODI
+            initial_cost = calculate_total_cost(initial_solution, costs)
+            optimal_solution, total_cost = modi_method(initial_solution, costs)
+            print("🟢 Matriz óptima (MODI) antes de calcular el costo:")
+            print(optimal_solution)
+            # 📌 Generar Análisis de Sensibilidad con Google Gemini AI
+            sensitivity_analysis = generate_sensitivity_analysis(optimal_solution, total_cost)
 
-            initial_cost = calculate_total_cost(initial_solution, c_bal)
-
-            # 3. Optimización con MODI
-            optimal_solution, total_cost = modi_method(initial_solution, c_bal)
-
-            # 4. Generar Análisis Técnico
-            sensitivity = generate_sensitivity_analysis(
-                optimal_solution, 
-                total_cost, 
-                c_bal, 
-                s_bal, 
-                d_bal, 
-                method
-            )
-
-            # 5. Respuesta segura (convertir todo a tipos serializables por JSON)
-            return {
+            response = {
                 "status": "success",
-                "initial_solution": initial_solution.tolist() if isinstance(initial_solution, np.ndarray) else initial_solution,
-                "optimal_solution": optimal_solution.tolist() if isinstance(optimal_solution, np.ndarray) else optimal_solution,
-                "initial_cost": float(initial_cost),
-                "total_cost": float(total_cost),
-                "sensitivity_analysis": sensitivity
+                "initial_solution": initial_solution.tolist(),
+                "optimal_solution": optimal_solution,
+                "initial_cost": initial_cost,
+                "total_cost": total_cost,
+                "sensitivity_analysis": sensitivity_analysis
             }
 
-        except Exception as e:
-            print(f"❌ Error en transporte: {str(e)}")
-            return {"status": "error", "message": str(e)}
+            print("📩 Respuesta enviada al frontend:", response)  # ✅ Verificar respuesta
 
-    elif problem_type == "linear":
-        try:
-            result = solve_linear_program(data["c"], data["A_ub"], data["b_ub"])
-            return result
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return response
 
+        except Exception as e:
+            print(f"❌ Error en solve_optimization: {str(e)}")
+            return {"status": "error", "message": str(e)}
     elif problem_type == "network":
-        try:
-            result = dijkstra_algorithm(data["graph"], data["start_node"])
-            return result
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    return {"status": "error", "message": "Tipo de problema no soportado."}
+        return dijkstra_algorithm(data["graph"], data["start_node"])
+    return {"status": "error", "message": "Unknown problem type"}
